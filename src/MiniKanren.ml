@@ -75,7 +75,7 @@ module Stream =
 
 let (!!!) = Obj.magic;;
 
-@type 'a logic = Var of GT.int GT.list * GT.int * 'a logic GT.list | Value of 'a with show, html, eq, compare, foldl, foldr, gmap
+@type 'a logic = Ident of GT.int | Var of GT.int GT.list * GT.int * 'a logic GT.list | Value of 'a with show, html, eq, compare, foldl, foldr, gmap
 
 let logic = {logic with 
   gcata = (); 
@@ -116,6 +116,8 @@ exception Not_a_value
 
 let (!!) x = Value x
 let inj = (!!)
+
+let new_ident u = Ident u
 
 let prj_k k = function Value x -> x | Var (_, i, c) -> k i c
 let prj x = prj_k (fun _ -> raise Not_a_value) x
@@ -299,15 +301,10 @@ module State =
     let show  (env, subst, constr) = Printf.sprintf "st {%s, %s}" (Subst.show subst) (GT.show(GT.list) Subst.show constr)
   end
 
-type goal = State.t -> State.t Stream.t
-
-let call_fresh f (env, subst, constr) =
-  let x, env' = Env.fresh env in
-  f x (env', subst, constr)
 
 exception Disequality_violated
 
-let (===) x y (env, subst, constr) =
+let run_unification x y (env, subst, constr) =
   try
     let prefix, subst' = Subst.unify env x y (Some subst) in
     begin match subst' with
@@ -336,7 +333,7 @@ let (===) x y (env, subst, constr) =
     end
   with Occurs_check -> Stream.nil
 
-let (=/=) x y ((env, subst, constr) as st) =
+let run_disequality x y ((env, subst, constr) as st) =
   let normalize_store prefix constr =
     let subst  = Subst.of_list prefix in
     let prefix = List.split (List.map (fun (_, x, t) -> (x, t)) prefix) in
@@ -369,28 +366,75 @@ let (=/=) x y ((env, subst, constr) as st) =
         )
   with Occurs_check -> Stream.cons st Stream.nil
 
-let conj f g st = Stream.bind (f st) g
+type term = Obj.t
+
+let term_of_logic = (!!!)
+let logic_of_term = (!!!)
+
+let (^~) hd tl =  term_of_logic hd :: tl
+let (^.) a  b  = [term_of_logic a; term_of_logic b]
+let (!^) a     = [term_of_logic a]
+
+type goal = 
+| Unification of term * term
+| Disequality of term * term
+| Conjunction of goal list
+| Disjunction of goal list
+| Fresh       of term * goal
+| Invoke      of string * term list
+
+let (===) x y = Unification (term_of_logic x, term_of_logic y)
+
+let (=/=) x y = Disequality (term_of_logic x, term_of_logic y)
+
+let conj g1 g2 = Conjunction [g1; g2]
 
 let (&&&) = conj
 
-let disj f g st = Stream.mplus (f st) (g st)
+let disj g1 g2 = Disjunction [g1; g2]
 
-let (|||) = disj 
+let (|||) = disj
 
-let rec (?|) = function
-| [h]  -> h
-| h::t -> h ||| ?| t
+let rec (?|) gs = Disjunction gs 
 
-let rec (?&) = function
-| [h]  -> h
-| h::t -> h &&& ?& t
+let rec (?&) gs = Conjunction gs
 
 let conde = (?|)
 
-module Fresh =
+let fresh is gs = List.fold_left (fun g i -> Fresh (i, g)) (?& gs) is
+
+let invoke name args = Invoke (name, args)
+
+type definition = string * (term list * goal)
+
+let def name args body = name, (args, body)
+
+type program = definition list * goal
+
+let prog defs g = (defs, g)
+
+let call_fresh f (env, subst, constr) =
+  let x, env' = Env.fresh env in
+  f x (env', subst, constr)
+
+(*
+let stream_conj_two f g st = Stream.bind (f st) g
+
+let rec stream_conj = function
+| [h]  -> h
+| h::t -> stream_conj_two h (stream_conj t)
+
+let stream_disj_two f g st = Stream.mplus (f st) (g st)
+
+let rec stream_disj = function
+| [h]  -> h
+| h::t -> stream_disj_two h (stream_disj t)
+*)
+
+(* module Fresh =
   struct
 
-    let succ prev f = call_fresh (fun x -> prev (f x))
+    let succ prev f = call_fresh (fun x -> prev (f x)) 
  
     let zero  f = f 
     let one   f = succ zero f
@@ -405,10 +449,10 @@ module Fresh =
     let qrst  = four
     let pqrst = five
 
-  end
+  end *)
 
-let success st = Stream.cons st Stream.nil
-let failure _  = Stream.nil
+let success = (!!true === !!true)
+let failure = (!!true === !!false)
  
 let eqo x y t =
   conde [
@@ -465,7 +509,7 @@ module Bool =
 
     let (!) = (!!)
 
-    let (|^) a b c =
+    (* let (|^) a b c =
       conde [
         (a === !false) &&& (b === !false) &&& (c === !true);
         (a === !false) &&& (b === !true)  &&& (c === !true);
@@ -491,7 +535,7 @@ module Bool =
       )
 
     let (&&) a b = ando a b !true
-    let (||) a b = oro  a b !true
+    let (||) a b = oro  a b !true *)
 
   end
 
@@ -550,7 +594,7 @@ module Nat =
 
     let prj n = prj_k (fun _ -> raise Not_a_value) n
 
-    let rec addo x y z =
+    (* let rec addo x y z =
       conde [
         (x === !O) &&& (z === y);
         Fresh.two (fun x' z' ->
@@ -593,7 +637,7 @@ module Nat =
     let lto x y b = gto y x b
 
     let (>) x y = gto x y !true
-    let (<) x y = lto x y !true
+    let (<) x y = lto x y !true *)
     
   end
 
@@ -697,7 +741,7 @@ module List =
 
     let (!) = (!!)
 
-    let rec foldro f a xs r =
+    (* let rec foldro f a xs r =
       conde [
         (xs === !Nil) &&& (a === r);
         Fresh.three (
@@ -716,9 +760,9 @@ module List =
             (xs === z % zs) &&&
             (Fresh.two (
                fun a1 a2 ->
+                  (ys === a1 % a2) &&&
                  (f z a1) &&&
-                 (mapo f zs a2) &&&
-                 (ys === a1 % a2)
+                 (mapo f zs a2)
             ))
         )
       ]
@@ -786,7 +830,7 @@ module List =
            x === a;
            (x =/= a) &&& (membero xs a)
          ])
-      )
+      ) *)
   end
 
 let rec inj_list = function
@@ -811,6 +855,97 @@ let rec prj_nat_list l =
   match prj l with
   | Nil -> []
   | Cons (x, xs) -> prj_nat x :: prj_nat_list xs
+
+
+(*** Interpretation ***)
+
+(* module InterMap = Map.Make (struct type t = term let compare = (==) end) *)
+type inter_map = (term * term) list 
+
+let rec refine_ident : inter_map -> State.t -> term -> term = fun imap (env, su, co) term ->
+  try
+      List.assq term imap
+  with
+  | Not_found -> 
+      (match Env.var env (!!! term) with
+       | Some _ -> term
+       | None   ->
+          (match wrap (Obj.repr term) with
+           | Unboxed _       -> term
+           | Boxed (t, s, f) ->
+              let term = Obj.dup (Obj.repr term) in
+              let sf =
+                if t = Obj.double_array_tag
+                then !!! Obj.set_double_field
+                else Obj.set_field
+              in
+              for i = 0 to s - 1 do
+                sf term i (refine_ident imap (env, su, co) (!!! (f i)))
+              done;
+              term
+           | Invalid _       -> invalid_arg ""
+          )
+      )
+
+let rec is_free_term : inter_map -> State.t -> term -> bool = fun imap ((env, su, co) as st) term ->
+  try
+      is_free_term imap st (List.assq term imap)
+  with
+  | Not_found -> 
+      (match Env.var env (!!! (Subst.walk env (!!! term) su)) with
+       | Some _ -> true
+       | None   -> false
+      )
+
+let rec pre_opt f_name goal =
+  let rec expand_conj = function
+  | []                   -> []
+  | Conjunction gs :: tl -> gs @ expand_conj tl
+  | hd :: tl             -> hd :: expand_conj tl
+  in
+  let bubble_rec gs =
+    let rec helper = function
+    | [] -> [], []
+    | Invoke (name, ts) :: tl when name = f_name -> let xs, ys = helper tl in       xs, Invoke (name, ts) :: ys
+    | hd :: tl                                   -> let xs, ys = helper tl in hd :: xs,                      ys
+    in
+    let xs, ys = helper gs in xs @ ys 
+  in
+  match goal with
+  | Unification _     -> goal
+  | Disequality _     -> goal
+  | Invoke      _     -> goal
+  | Disjunction gs    -> Disjunction (List.map (pre_opt f_name) gs)
+  | Fresh      (x, g) -> Fresh (x, pre_opt f_name g)
+  | Conjunction gs    -> Conjunction (bubble_rec @@ expand_conj @@ List.map (pre_opt f_name) gs)
+
+
+
+let run_prog (defs, goal) =
+  let rec run_goal : inter_map -> goal -> State.t -> State.t Stream.t = fun imap goal st ->
+    match goal with
+    | Unification (x, y)  -> run_unification (logic_of_term @@ refine_ident imap st x) (logic_of_term @@ refine_ident imap st y) st
+    | Disequality (x, y)  -> run_disequality (logic_of_term @@ refine_ident imap st x) (logic_of_term @@ refine_ident imap st y) st
+    | Conjunction (g::gs) -> List.fold_left Stream.bind  (run_goal imap g st) (List.map (run_goal imap) gs)
+    | Disjunction (g::gs) -> List.fold_left Stream.mplus (run_goal imap g st) (List.map (fun g -> run_goal imap g st) gs)
+    | Fresh       (x, g)  -> let (env, subst, constr) = st in
+                             let var, env' = Env.fresh env in
+                             run_goal ((x, term_of_logic var)::imap) g (env', subst, constr)
+    | Invoke (name, arg_vals) -> let args, g = List.assoc name defs in
+                                 let imap' = List.fold_left2 (fun m a av -> (a, refine_ident imap st av)::m) imap args arg_vals in
+                                 Stream.from_fun (fun () -> run_goal imap' g st)
+  in
+  run_goal [] goal
+
+
+(*let rec run_goal : goal -> State.t -> State.t Stream.t = fun goal st ->
+  match goal with
+  | Unification (x, y) -> run_unification (!!! x) (!!! y) st
+  | Disequality (x, y) -> run_disequality (!!! x) (!!! y) st
+  | Conjunction  gs    -> stream_conj (List.map (fun g -> run_goal g) (basics_extrusion gs)) st
+  | Disjunction  gs    -> stream_disj (List.map (fun g -> run_goal g) gs) st
+  | Fresh        f     -> call_fresh (fun logic st -> run_goal (f (!!! logic)) st) st
+  | Defered      f     -> Stream.from_fun (fun () -> run_goal (f ()) st)*)
 
 let rec refine : State.t -> 'a logic -> 'a logic = fun ((e, s, c) as st) x ->  
   let rec walk' recursive env var subst =
@@ -890,7 +1025,7 @@ let refiner : 'a logic -> 'a refiner = fun x ans ->
 
 module LogicAdder = 
   struct
-    let zero f = f
+    let zero f = run_prog f
  
     let succ (prev: 'a -> State.t -> 'b) (f: 'c logic -> 'a) : State.t -> 'c refiner * 'b =
       call_fresh (fun logic st -> (refiner logic, prev (f logic) st))
