@@ -181,6 +181,14 @@ module Bool :
 
   end
 
+module IdentSet :
+  sig
+    type t
+
+    val empty     : unit -> t
+    val new_ident : t -> int -> 'a logic
+  end
+
 module Nat :
   sig
 
@@ -397,8 +405,6 @@ val (^~) : 'a logic -> term list -> term list
 val (^.) : 'a logic -> 'b logic  -> term list
 val (!^) : 'a logic -> term list
 
-val new_ident : int -> 'a logic
-
 (** [x === y] creates a goal, which performs a unifications of
     [x] and [y] *)
 val (===) : 'a logic -> 'a logic -> goal
@@ -442,7 +448,7 @@ val invoke : string -> term list -> goal
 
 val def : string -> term list -> goal -> definition
 
-val prog : definition list -> goal -> program
+val prog : IdentSet.t -> definition list -> goal -> program
 
 (** {2 Some predefined goals} *)
 
@@ -522,22 +528,22 @@ val two :
   (('b logic -> 'c logic -> program) -> State.t -> 'b refiner * ('c refiner * State.t Stream.t)) *
   (('e -> 'f -> 'g) -> 'e * 'f -> 'g) * 
   (('h -> ('h -> 'i) * ('h -> 'j) -> 'i * 'j) * ('k * ('l * 'm) -> ('k * 'l) * 'm))
-	    
+      
 val three :
   unit ->
   (('b logic -> 'c logic -> 'd logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * State.t Stream.t))) *
   (('f -> 'g -> 'h -> 'i) -> 'f * ('g * 'h) -> 'i) *
   (('j -> ('j -> 'k) * (('j -> 'l) * ('j -> 'm)) -> 'k * ('l * 'm)) * ('n * ('o * ('p * 'q)) -> ('n * ('o * 'p)) * 'q))
-	    
+      
 val four :
   unit ->
   (('b logic -> 'c logic -> 'd logic -> 'e logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * State.t Stream.t)))) *
   (('g -> 'h -> 'i -> 'j -> 'k) -> 'g * ('h * ('i * 'j)) -> 'k) *
   (('l -> ('l -> 'm) * (('l -> 'n) * (('l -> 'o) * ('l -> 'p))) -> 'm * ('n * ('o * 'p))) * ('q * ('r * ('s * ('t * 'u))) -> ('q * ('r * ('s * 't))) * 'u))
-	    
+      
 val five :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> program) -> State.t ->	'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * State.t Stream.t))))) *
+  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> program) -> State.t ->  'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * State.t Stream.t))))) *
   (('h -> 'i -> 'j -> 'k -> 'l -> 'm) -> 'h * ('i * ('j * ('k * 'l))) -> 'm) * 
   (('n -> ('n -> 'o) * (('n -> 'p) * (('n -> 'q) * (('n -> 'r) * ('n -> 's)))) -> 'o * ('p * ('q * ('r * 's)))) * ('t * ('u * ('v * ('w * ('x * 'y)))) -> ('t * ('u * ('v * ('w * 'x)))) * 'y))
 
