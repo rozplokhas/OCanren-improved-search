@@ -985,7 +985,7 @@ let rec check_termination : bool list Cash.t ref -> IdentSet.t -> definition lis
     let sc = Cash.cardinal (! cash) in
     let res = List.for_all (fun x -> x) @@ known_list cash iset defs f_name known
     in
-    (*
+    (* (
       if Cash.cardinal (! cash) <> sc
       then  
       (

@@ -214,6 +214,11 @@ let r'  : int logic List.logic = IdentSet.new_ident id_set3 5
 let h   : int logic            = IdentSet.new_ident id_set3 6
 let t   : int logic List.logic = IdentSet.new_ident id_set3 7
 let r'' : int logic List.logic = IdentSet.new_ident id_set3 8
+let d   : int logic List.logic = IdentSet.new_ident id_set3 9
+let q'  : int logic List.logic = IdentSet.new_ident id_set3 9
+let n   : int logic List.logic = IdentSet.new_ident id_set3 10
+let n'  : int logic List.logic = IdentSet.new_ident id_set3 11
+
 
 let rec to_bin = (function
 | 0 -> !Nil
@@ -312,8 +317,32 @@ let bin_multo = def "bin_multo" (x ^~ y ^. r) (
     ])
   ]  
 )
- 
 
+let bin_lto = def "bin_lto" (x ^. y) (
+  fresh (!^ d) [
+    (invoke "poso" (!^ d));
+    (invoke "bin_pluso" (x ^~ d ^. y))
+  ]
+)
+
+let bin_divo = def "bin_divo" (x ^~ y ^~ q' ^. r) (
+  fresh (!^ z) [
+    (invoke "bin_multo" (q' ^~ y ^. z));
+    (invoke "bin_pluso" (z ^~ r ^. x));
+    (invoke "bin_lto"   (r ^. y))
+  ]
+)
+
+let bin_powo = def "bin_powo" (x ^~ n ^. r) (
+  conde [
+    (n === !Nil) &&& (r === !< !1);
+    fresh (n' ^. r') [
+      (invoke "bin_pluso" (n' ^~ (!< !1) ^. n));
+      (invoke "bin_powo"  (x ^~ n' ^. r'));
+      (invoke "bin_multo" (r' ^~ x ^. r))
+    ]
+  ]
+)
 
 let show_int           = show (logic) (show int)
 let show_int_list      = show (List.logic) show_int
@@ -322,55 +351,79 @@ let show_nat_list      = show (List.logic) show_nat
 let show_nat_gr      n = show int @@ prj_nat n
 let show_nat_list_gr l = show list (show int) @@ prj_nat_list l
 
+let reverso_list   = [appendo; reverso]
+let minimumo_list  = [gto; leo; minimumo]
+let sorto_list     = [leo; gto; minmaxo; smallesto; sorto]
+let perm_list      = [leo; gto; minmaxo; smallesto; sorto; perm]
+let bin_pluso_list = [poso; bin_pluso]
+let bin_multo_list = [poso; bin_pluso; bin_multo]
+let bin_lto_list   = [poso; bin_pluso; bin_lto]
+let bin_divo_list  = [poso; bin_pluso; bin_lto; bin_multo; bin_divo]
+let bin_powo_list  = [poso; bin_pluso; bin_multo; bin_powo]
+
 let _ =
-  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [just_a          ]   (invoke "just_a"    (!^ q))                                               )) qh;
-  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [a_and_b         ]   (invoke "a_and_b"   (!^ q))                                               )) qh;
-  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [a_and_b'        ]   (invoke "a_and_b'"  (!^ q))                                               )) qh;
-  run show_int          10  q  (REPR (fun q   -> prog id_set0 [fives           ]   (invoke "fives"     (!^ q))                                               )) qh;
+  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [just_a  ]        (invoke "just_a"    (!^ q))                                               )) qh;
+  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [a_and_b ]        (invoke "a_and_b"   (!^ q))                                               )) qh;
+  run show_int         (-1) q  (REPR (fun q   -> prog id_set0 [a_and_b']        (invoke "a_and_b'"  (!^ q))                                               )) qh;
+  run show_int          10  q  (REPR (fun q   -> prog id_set0 [fives   ]        (invoke "fives"     (!^ q))                                               )) qh;
 
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set0 [appendo         ]   (invoke "appendo"   (q ^~ inj_list [3; 4]  ^. inj_list [1; 2; 3; 4]))     )) qh;
-  run show_int_list      4  qr (REPR (fun q r -> prog id_set0 [appendo         ]   (invoke "appendo"   (q ^~ inj_list []      ^. r))                         )) qrh;
+  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set0 [appendo ]        (invoke "appendo"   (q ^~ inj_list [3; 4]  ^. inj_list [1; 2; 3; 4]))     )) qh;
+  run show_int_list      4  qr (REPR (fun q r -> prog id_set0 [appendo ]        (invoke "appendo"   (q ^~ inj_list []      ^. r))                         )) qrh;
   
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. inj_list [1; 2; 3; 4]))                         )) qh;
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (inj_list [] ^. inj_list []))                         )) qh;
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (inj_list [1; 2; 3; 4] ^. q))                         )) qh;
-  run show_int_list      1  q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. q))                                             )) qh;
-  run show_int_list      2  q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. q))                                             )) qh;
-  run show_int_list      3  q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. q))                                             )) qh;
-  run show_int_list     10  q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. q))                                             )) qh;
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (q ^. inj_list [1]))                                  )) qh;
-  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 [appendo; reverso]   (invoke "reverso"   (inj_list [1] ^. q))                                  )) qh;
+  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. inj_list [1; 2; 3; 4]))                         )) qh;
+  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (inj_list [] ^. inj_list []))                         )) qh;
+  run show_int_list      1  q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. q))                                             )) qh;
+  run show_int_list      2  q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. q))                                             )) qh;
+  run show_int_list      3  q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. q))                                             )) qh;
+  run show_int_list     10  q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. q))                                             )) qh;
+  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (q ^. inj_list [1]))                                  )) qh;
+  run show_int_list    (-1) q  (REPR (fun q   -> prog id_set1 reverso_list      (invoke "reverso"   (inj_list [1] ^. q))                                  )) qh;
 
-  run show_nat         (-1) q  (REPR (fun q   -> prog id_set2 [gto; leo; minimumo] (invoke "minimumo"  (inj_nat_list [6; 5; 4; 1; 2] ^. q))                  )) qh;
-  run show_nat_list      5  q  (REPR (fun q   -> prog id_set2 [gto; leo; minimumo] (invoke "minimumo"  (q ^. inj_nat 4))                                     )) qh;
+  run show_nat         (-1) q  (REPR (fun q   -> prog id_set2 minimumo_list     (invoke "minimumo"  (inj_nat_list [6; 5; 4; 1; 2] ^. q))                  )) qh;
+  run show_nat_list      5  q  (REPR (fun q   -> prog id_set2 minimumo_list     (invoke "minimumo"  (q ^. inj_nat 4))                                     )) qh;
   
-  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 [leo; gto; minmaxo; smallesto; sorto]
-                                                            (invoke "sorto"  (inj_nat_list [10; 9; 8; 7; 6; 5; 4; 3; 2; 1] ^. q))                            )) qh;
-  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 [leo; gto; minmaxo; smallesto; sorto]
-                                                            (invoke "sorto"  (q ^. inj_nat_list [1; 2; 3; 4; 5]))                                            )) qh;
-  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 [leo; gto; minmaxo; smallesto; sorto; perm]
-                                                            (invoke "perm"   (q ^. inj_nat_list [4; 2; 5; 1; 3]))                                            )) qh;
+  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 sorto_list        (invoke "sorto"     (inj_nat_list [10; 9; 8; 7; 6; 5; 4; 3; 2; 1] ^. q))                            )) qh;
+  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 sorto_list        (invoke "sorto"     (q ^. inj_nat_list [1; 2; 3; 4; 5]))                                            )) qh;
+  run show_nat_list_gr (-1) q  (REPR (fun q   -> prog id_set2 perm_list         (invoke "perm"      (q ^. inj_nat_list [4; 2; 5; 1; 3]))                                            )) qh;
 
   (** )
-  run show_nat_gr      (-1) qr (REPR (fun q r -> prog id_set2 [pluso]              (invoke "pluso"     (q ^~ r ^. inj_nat 4))                                )) qrh;
-  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]        (invoke "mulo"      (inj_nat 3 ^~ inj_nat 5 ^. q))                        )) qh;
-  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]        (invoke "mulo"      (q ^~ q ^. inj_nat 16))                               )) qh;
-  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]        (invoke "mulo"      (q ^~ q ^. inj_nat 15))                               )) qh;
+  run show_nat_gr      (-1) qr (REPR (fun q r -> prog id_set2 [pluso]           (invoke "pluso"     (q ^~ r ^. inj_nat 4))                                )) qrh;
+  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]     (invoke "mulo"      (inj_nat 3 ^~ inj_nat 5 ^. q))                        )) qh;
+  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]     (invoke "mulo"      (q ^~ q ^. inj_nat 16))                               )) qh;
+  run show_nat_gr      (-1) q  (REPR (fun q   -> prog id_set2 [pluso; mulo]     (invoke "mulo"      (q ^~ q ^. inj_nat 15))                               )) qh;
   ( **)
 
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]           (invoke "map_succ"  (inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10] ^. q))  )) qh;
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]           (invoke "map_succ"  (q ^. inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10]))  )) qh;
+  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]     (invoke "map_succ"  (inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10] ^. q))  )) qh;
+  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]     (invoke "map_succ"  (q ^. inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10]))  )) qh;
 
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso]    (invoke "bin_pluso" ((to_bin 3) ^~ (to_bin 6) ^. q))                      )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso]    (invoke "bin_pluso" ((to_bin 2) ^~ q ^. (to_bin 5)))                      )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso]    (invoke "bin_pluso" ((to_bin 8) ^~ q ^. (to_bin 6)))                      )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso]    (invoke "bin_pluso" (q ^~ (to_bin 5) ^. (to_bin 8)))                      )) qh;
-  run show_int_list   (-1)  qr  (REPR (fun q r   -> prog id_set3 [poso; bin_pluso]    (invoke "bin_pluso" (q ^~ r  ^. (to_bin 5)))                              )) qrh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 3) ^~ (to_bin 6) ^. q))                      )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 2) ^~ q ^. (to_bin 5)))                      )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 8) ^~ q ^. (to_bin 6)))                      )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" (q ^~ (to_bin 5) ^. (to_bin 8)))                      )) qh;
+  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_pluso_list (invoke "bin_pluso" (q ^~ r  ^. (to_bin 5)))                              )) qrh;
   
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" ((to_bin 5) ^~ (to_bin 3) ^. q))              )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" (q ^~ (to_bin 3) ^. (to_bin 12)))             )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" ((to_bin 3) ^~ q ^. (to_bin 12)))             )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" (q ^~ q ^. (to_bin 16)))                      )) qh;
-  run show_int_list   (-1)  q   (REPR (fun q     -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" (q ^~ q ^. (to_bin 15)))                      )) qh;
-  run show_int_list   (-1)  qr  (REPR (fun q r   -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" (q ^~ r ^. (to_bin 24)))                      )) qrh;
-  run show_int_list    10   qrs (REPR (fun q r s -> prog id_set3 [poso; bin_pluso; bin_multo] (invoke "bin_multo" (q ^~ r  ^. s))                               )) qrsh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" ((to_bin 5) ^~ (to_bin 3) ^. q))                      )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ (to_bin 3) ^. (to_bin 12)))                     )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" ((to_bin 3) ^~ q ^. (to_bin 12)))                     )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ q ^. (to_bin 16)))                              )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ q ^. (to_bin 15)))                              )) qh;
+  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ r ^. (to_bin 24)))                              )) qrh;
+  run show_int_list     10  qrs (REPR (fun q r s -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ r  ^. s))                                       )) qrsh;
+
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 5) ^. (to_bin 10)))                          )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 6) ^. (to_bin 6) ))                          )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 8) ^. (to_bin 4) ))                          )) qh;
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   (q          ^. (to_bin 13)))                          )) qh;
+  run show_int_list     10  q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 6) ^. q          ))                          )) qh;
+  run show_int_list     10  qr  (REPR (fun q r   -> prog id_set3 bin_lto_list   (invoke "bin_lto"   (q          ^. r          ))                          )) qrh;
+
+  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  ((to_bin 21) ^~ (to_bin 7) ^~ q ^. r))                )) qrh;
+  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  ((to_bin 23) ^~ (to_bin 5) ^~ q ^. r))                )) qrh;
+  run show_int_list    (-1) qrs (REPR (fun q r s -> prog id_set3 bin_divo_list ((invoke "bin_lto"   ((to_bin 0) ^. r)) &&& 
+                                                                                                        (invoke "bin_divo" ((to_bin 5) ^~ q ^~ r ^. s)))  )) qrsh;
+  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  (q ^~ (to_bin 5) ^~ (to_bin 4) ^. r))                 )) qrh;
+  run show_int_list      5  qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  (q ^~ r ^~ (to_bin 2) ^. (to_bin 3)))                 )) qrh;
+
+  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  ((to_bin 3) ^~ (to_bin 4) ^. q))                      )) qh;
+  run show_int_list      1 q    (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  (q          ^~ (to_bin 3) ^. (to_bin 27)))            )) qh;
+  
