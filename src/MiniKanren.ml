@@ -45,6 +45,15 @@ module Stream =
     let hd s = List.hd @@ take ~n:1 s
     let tl s = snd @@ retrieve ~n:1 s
 
+    let rec of_list = function
+    | []    -> nil
+    | x::xs -> cons x (of_list xs)
+
+    let rec to_list = function
+    | Nil           -> []
+    | Cons (hd, tl) -> hd :: to_list tl
+    | Lazy  z       -> to_list (Lazy.force z)
+
     let rec mplus fs gs =
       from_fun (fun () ->
          match fs with
@@ -448,6 +457,7 @@ type goal =
 | Disjunction of goal list
 | Fresh       of term * goal
 | Invoke      of string * term list
+| Marked      of goal
 
 let (===) x y = Unification (term_of_logic x, term_of_logic y)
 
@@ -923,149 +933,7 @@ let rec prj_nat_list l =
   | Cons (x, xs) -> prj_nat x :: prj_nat_list xs
 
 
-(*** Interpretation ***)
-
-module Cash = Map.Make (struct type t = string * bool list let compare = Pervasives.compare end)
-
-module IntSet = Set.Make (struct type t = int let compare = Pervasives.compare end)
-
-let rec known_list : bool list Cash.t ref -> IdentSet.t -> definition list -> string -> bool list -> bool list =
-  fun cash iset defs f_name known ->
-    try
-      let res = Cash.find (f_name, known) (!cash)
-      in res
-    with
-    | Not_found ->
-        let args, body = List.assoc f_name defs in
-        let start_set = IntSet.of_list @@ List.map (fun (_, t) -> let Some i = IdentSet.id iset t in i) @@ List.filter fst 
-                            @@ List.map2 (fun x y -> (x, y)) known args in
-        let res_set = known_set cash iset defs f_name body start_set in
-        let res = List.map (fun a -> let Some i = IdentSet.id iset a in IntSet.mem i res_set) args in
-        (*Printf.printf "from %d " (Cash.cardinal (!cash));*)
-        cash := Cash.add (f_name, known) res (!cash);
-        (*Printf.printf "to %d\n\n" (Cash.cardinal (!cash));*)
-        res
-and     known_set         : bool list Cash.t ref -> IdentSet.t -> definition list -> string -> goal -> IntSet.t -> IntSet.t =
-  fun cash iset defs f_name goal known ->
-    let known_set' g ks = known_set cash iset defs f_name g ks in
-    match goal with
-    | Unification (t1, t2) ->
-        let fv t = IntSet.of_list @@ IdentSet.idents iset t in
-        let fv1, fv2 = fv t1, fv t2 in
-        if   IntSet.subset fv1 known
-        then IntSet.union  fv2 known
-        else 
-          if   IntSet.subset fv2 known
-          then IntSet.union  fv1 known
-          else known
-    | Disequality _     -> known
-    | Disjunction (g::gs) -> List.fold_left IntSet.inter (known_set' g known) (List.map (fun g -> known_set' g known) gs)
-    | Fresh (_, g) -> known_set' g known
-    | Invoke (name, args) when name = f_name -> IntSet.union known @@ IntSet.of_list @@ List.map (fun (Some x) -> x) 
-                                                    @@ List.filter (function None -> false | Some _ -> true) @@ List.map (IdentSet.id iset) args
-    | Invoke (name, args) -> 
-        let terms = List.map (IdentSet.id iset) args
-        in IntSet.union known @@ IntSet.of_list @@ List.map (fun (Some x) -> x) @@ List.filter (function None -> false | Some _ -> true) @@ 
-              List.map2 (fun ot f -> if f then ot else None) terms @@ known_list cash iset defs name @@ 
-              List.map (function None -> true | Some i -> IntSet.mem i known) terms 
-    | Conjunction gs ->
-        let walk gs known = List.fold_left (fun ks g -> IntSet.union ks (known_set' g ks)) known gs
-        in
-        let rec cycle_walk gs known =
-          let new_known = walk gs known
-          in if IntSet.equal known new_known
-             then known
-             else cycle_walk gs new_known
-        in
-        cycle_walk gs known
-
-
-let rec check_termination : bool list Cash.t ref -> IdentSet.t -> definition list -> string -> bool list -> bool =
-  fun cash iset defs f_name known -> 
-    let sc = Cash.cardinal (! cash) in
-    let res = List.for_all (fun x -> x) @@ known_list cash iset defs f_name known
-    in
-    (* (
-      if Cash.cardinal (! cash) <> sc
-      then  
-      (
-        Printf.printf "Cash update:\n";
-        Cash.iter (fun (name, bs) ks -> Printf.printf "%s, %s -> %s\n" name ((GT.show(GT.list) (GT.show(GT.bool))) bs) ((GT.show(GT.list) (GT.show(GT.bool))) ks)) (!cash);
-        Printf.printf "\n"
-      )
-      else
-        ()
-    ); *)
-    res
-
-let rec pre_opt goal =
-  let rec expand_conj = function
-  | []                   -> []
-  | Conjunction gs :: tl -> gs @ expand_conj tl
-  | hd :: tl             -> hd :: expand_conj tl
-  in
-  (*let bubble_rec gs =
-    let rec helper = function
-    | [] -> [], []
-    | Invoke (name, ts) :: tl when name = f_name -> let xs, ys = helper tl in       xs, Invoke (name, ts) :: ys
-    | hd :: tl                                   -> let xs, ys = helper tl in hd :: xs,                      ys
-    in
-    let xs, ys = helper gs in xs @ ys 
-  in*)
-  match goal with
-  | Unification _     -> goal
-  | Disequality _     -> goal
-  | Invoke      _     -> goal
-  | Disjunction gs    -> Disjunction (List.map pre_opt gs)
-  | Fresh      (x, g) -> Fresh (x, pre_opt g)
-  | Conjunction gs    -> Conjunction (expand_conj @@ List.map pre_opt gs)
-
-let rec is_closed_term : State.t -> term -> bool = fun ((env, subst, _) as st) term ->
-  let term = Subst.walk env (!!! term) subst in
-    match Env.var env term with
-    | Some i -> false
-    | None ->
-        (match wrap (Obj.repr term) with
-         | Unboxed _ -> true
-         | Boxed (t, s, f) ->
-            let rec inner i =
-              if i < s
-              then (if is_closed_term st (!!! (f i)) then inner (i+1) else false)
-              else true
-            in inner 0
-         | Invalid n -> invalid_arg (Printf.sprintf "Invalid value for reconstruction (%d)" n)
-        )
-
-let run_prog (iset, defs, goal) =
-  let defs, goal = List.map (fun (name, (args, body)) -> (name, (args, pre_opt body))) defs, pre_opt goal in
-  let cash = ref Cash.empty in
-  let rec run_goal : IdentSet.t -> goal -> State.t -> State.t Stream.t = fun iset goal ((env, subst, constr) as st) ->
-    match goal with
-    | Unification (x, y)  -> run_unification (logic_of_term @@ IdentSet.refine env iset x) (logic_of_term @@ IdentSet.refine env iset y) st
-    | Disequality (x, y)  -> run_disequality (logic_of_term @@ IdentSet.refine env iset x) (logic_of_term @@ IdentSet.refine env iset y) st
-    | Conjunction gs -> 
-        let rec run_conj : goal list -> goal list -> bool -> bool -> State.t -> State.t Stream.t = 
-          fun goals defer_goals final_flag change_flag st ->
-            match goals, defer_goals with
-            | [],                        [] -> Stream.cons st Stream.nil
-            | [],                        _  -> run_conj (List.rev defer_goals) [] (not change_flag) false st
-            | Invoke (name, args) :: gs, _  -> let bs = List.map (fun a -> is_closed_term st @@ IdentSet.refine env iset a) args in
-                                               if final_flag || check_termination cash iset defs name bs
-                                               then Stream.bind (run_goal iset (Invoke (name, args)) st) (run_conj gs defer_goals final_flag true)
-                                               else run_conj gs (Invoke (name, args) :: defer_goals) final_flag change_flag st
-            | g::gs                    , _  -> Stream.bind (run_goal iset g st) (run_conj gs defer_goals final_flag true)
-        in
-        run_conj gs [] false false st
-    | Disjunction (g::gs) -> List.fold_left Stream.mplus (run_goal iset g st) (List.map (fun g -> run_goal iset g st) gs)
-    | Fresh       (x, g)  -> let var, env' = Env.fresh env in
-                             run_goal (IdentSet.bind_ident x (term_of_logic var) iset) g (env', subst, constr)
-    | Invoke (name, arg_vals) -> let args, g = List.assoc name defs in
-                                 let iset' = List.fold_left2 (fun is a av -> IdentSet.bind_ident a (IdentSet.refine env iset av) is) iset args arg_vals in
-                                 Stream.from_fun (fun () -> run_goal iset' g st)
-  in
-  run_goal iset goal
-
-let rec refine : State.t -> 'a logic -> 'a logic = fun ((e, s, c) as st) x ->  
+let rec refine : State.t -> 'a logic -> 'a logic = fun ((e, s, c) as st) x ->
   let rec walk' recursive env var subst =
     let var = Subst.walk env var subst in
     match Env.var env var with
@@ -1103,6 +971,200 @@ let rec refine : State.t -> 'a logic -> 'a logic = fun ((e, s, c) as st) x ->
     | _ -> var
   in
   walk' true e (!!!x) s
+
+
+
+(*** Interpretation ***)
+
+module Interpretation :
+  sig
+
+    val run_prog : program -> State.t -> State.t Stream.t
+  
+  end = 
+  struct
+
+    module IntMap = Map.Make (struct type t = int let compare = Pervasives.compare end)
+
+    let rec is_reducible : Env.t -> 'a logic -> 'a logic -> bool = fun env term res_term ->
+      let rec equal : 'a logic -> 'a logic -> bool = fun t1 t2 ->
+        match Env.var env t1, Env.var env t2 with
+        | Some i, Some j -> i = j
+        | None  , Some _ -> false
+        | Some _, None   -> false
+        | None  , None   ->
+          (
+            match wrap (Obj.repr t1), wrap (Obj.repr t2) with
+            | Unboxed _      , Unboxed _          -> t1 = t2
+            | Boxed (t, s, f), Boxed (t1, s1, f1) ->
+              if t = t1 && s = s1
+              then
+                let rec inner i = 
+                  if i < s
+                  then equal (!!!(f i)) (!!!(f1 i)) && inner (i + 1)
+                  else true
+                in
+                inner 0
+              else false
+            | _              , _                  -> false
+          ) 
+      in
+      let rec find_subst : term IntMap.t option -> 'a logic -> 'a logic -> term IntMap.t option = fun subst_opt term res_term ->
+        match subst_opt with
+        | None -> None
+        | Some subst ->
+          (
+            match Env.var env term with
+            | Some i ->
+              (
+                let v_opt = try Some (IntMap.find i subst) with Not_found -> None in
+                match v_opt with
+                | Some v -> if equal (!!! v) (!!! res_term) then subst_opt else None
+                | None   -> Some (IntMap.add i (term_of_logic res_term) subst)
+              )
+            | None   ->
+              (
+                match Env.var env res_term with
+                | Some _ -> None
+                | None   ->
+                  (
+                    match wrap (Obj.repr term), wrap (Obj.repr res_term) with
+                    | Unboxed _      , Unboxed _          -> if term = res_term then subst_opt else None
+                    | Boxed (t, s, f), Boxed (rt, rs, rf) ->
+                      if t = rt && s = rs
+                      then
+                        let rec drag_subst i subs =
+                          if i < s
+                          then drag_subst (i + 1) (find_subst subs (!!!(f i)) (!!!(rf i)))
+                          else subs
+                        in
+                        drag_subst 0 subst_opt
+                      else None
+                    | _              , _                  ->  None
+                  )
+              )
+          )
+      in
+      match find_subst (Some IntMap.empty) term res_term with
+      | Some _ -> true
+      | None   -> false
+
+    module StringMap = Map.Make (struct type t = string let compare = Pervasives.compare end)
+
+    module Log = StringMap
+
+    module Defs = StringMap
+
+    exception Divergence
+
+    type result =
+    | Result of State.t list
+    | Diverge
+    | RebuildFunc of goal
+    | Restart of (term list * goal) Defs.t
+
+    let process_result : (State.t list -> result) -> (goal -> result) -> result -> result =
+      fun proc_result proc_rebuild -> 
+        function
+        | Result      s    -> proc_result s
+        | Diverge          -> Diverge
+        | RebuildFunc g    -> proc_rebuild g
+        | Restart     defs -> Restart defs
+
+    let rec pre_opt goal =
+      let rec expand_conj = function
+      | []                   -> []
+      | Conjunction gs :: tl -> gs @ expand_conj tl
+      | hd :: tl             -> hd :: expand_conj tl
+      in
+      match goal with
+      | Unification _     -> goal
+      | Disequality _     -> goal
+      | Invoke      _     -> goal
+      | Disjunction gs    -> Disjunction (List.map pre_opt gs)
+      | Fresh      (x, g) -> Fresh (x, pre_opt g)
+      | Marked      g     -> Marked (pre_opt g)
+      | Conjunction gs    -> Conjunction (expand_conj @@ List.map pre_opt gs)
+
+    let run_prog (iset, defs, goal) =
+      let defs, goal = List.map (fun (name, (args, body)) -> (name, (args, pre_opt body))) defs, pre_opt goal in
+      let defs = List.fold_left (fun acc (k, x) -> Defs.add k x acc) Defs.empty defs in
+      let rec swap_first_unmarked : goal -> goal list -> (goal * goal list) option = fun sg ->
+        function
+        | []             -> None
+        | Marked g :: gs -> (match swap_first_unmarked sg gs with None -> None | Some (rg, gs') -> Some (rg, Marked g :: gs'))
+        | g        :: gs -> Some (g, Marked sg :: gs)
+      in
+      let rec run_goal : (term list * goal) Defs.t -> term Log.t -> IdentSet.t -> goal -> State.t -> result = fun defs log iset goal ((env, subst, constr) as st) ->
+        match goal with
+        | Unification (x, y)           -> Result (Stream.to_list (run_unification (logic_of_term @@ IdentSet.refine env iset x) 
+                                                                                  (logic_of_term @@ IdentSet.refine env iset y) 
+                                                                                  st))
+        | Disequality (x, y)           -> Result (Stream.to_list (run_disequality (logic_of_term @@ IdentSet.refine env iset x) 
+                                                                                  (logic_of_term @@ IdentSet.refine env iset y)
+                                                                                  st))
+        | Marked       g               -> process_result (fun ss -> Result ss) (fun g' -> RebuildFunc (Marked g')) (run_goal defs log iset g st) 
+        | Fresh       (x, g)           -> let var, env' = Env.fresh env in
+                                          process_result (fun ss -> Result ss)
+                                                         (fun g' -> RebuildFunc (Fresh (x, g')))
+                                                         (run_goal defs log (IdentSet.bind_ident x (term_of_logic var) iset) g (env', subst, constr))
+        | Disjunction [g]              -> process_result (fun ss -> Result ss) (fun g' -> RebuildFunc (Disjunction [g'])) (run_goal defs log iset g st)
+        | Disjunction (g :: gs)        -> process_result (fun g_res -> process_result (fun gs_res -> Result (g_res @ gs_res)) 
+                                                                                      (function (Disjunction gs') -> RebuildFunc (Disjunction (g :: gs'))) 
+                                                                                      (run_goal defs log iset (Disjunction gs) st)) 
+                                                         (fun g' -> RebuildFunc (Disjunction (g' :: gs))) 
+                                                         (run_goal defs log iset g st)
+        | Conjunction [g]              -> process_result (fun ss -> Result ss) (fun g' -> RebuildFunc (Conjunction [g'])) (run_goal defs log iset g st)
+        | Conjunction (Marked g :: gs) -> run_goal defs log iset (Conjunction (g :: List.map (function Marked mg -> mg | g -> g) gs)) st
+        | Conjunction (g :: gs)        -> (
+                                             match run_goal defs log iset g st with
+                                             | Result ss      ->
+                                                 List.fold_right (fun s -> function
+                                                                           | Result acc -> process_result (fun s_res -> Result (s_res @ acc)) 
+                                                                                                          (function (Conjunction gs') -> RebuildFunc (Conjunction (g :: gs')))
+                                                                                                          (run_goal defs log iset (Conjunction gs) s) 
+                                                                           | res -> res
+                                                                 ) ss (Result [])
+                                             | Diverge        -> (
+                                                                    match swap_first_unmarked g gs with 
+                                                                    | None -> Diverge
+                                                                    | Some (g', gs') -> RebuildFunc (Conjunction (g' :: gs'))
+                                                                 )
+                                             | RebuildFunc g' -> RebuildFunc (Conjunction (g' :: gs))
+                                             | Restart defs'  -> Restart defs'
+                                          )
+        | Invoke (name, arg_vals)      -> let arg_vals_refined = List.map (fun av -> term_of_logic (refine st (logic_of_term (IdentSet.refine env iset av)))) arg_vals
+                                          in
+                                          let new_log = try 
+                                                          let old_vals = Log.find name log in
+                                                          if is_reducible env (!!! arg_vals_refined) (!!! old_vals)
+                                                            then None
+                                                            else Some (Log.add name (!!! arg_vals_refined) log)
+                                                        with Not_found -> Some (Log.add name (!!! arg_vals_refined) log)
+                                          in
+                                          match new_log with
+                                          | None         -> Diverge
+                                          | Some log' -> let arg_names, body = Defs.find name defs in
+                                                         let iset' = List.fold_left2 (fun is an av -> IdentSet.bind_ident an av is) 
+                                                                                     iset 
+                                                                                     arg_names 
+                                                                                     arg_vals_refined
+                                                         in
+                                                         process_result (fun ss -> Result ss)
+                                                                        (fun body' -> Restart (Defs.add name (arg_names, body') defs))
+                                                                        (run_goal defs log' iset' body st)
+      in
+      let rec run_attempt : (term list * goal) Defs.t -> goal -> State.t -> State.t Stream.t = fun defs goal st ->
+         match run_goal defs Log.empty iset goal st with
+         | Result      ss    -> Stream.of_list ss
+         | Diverge           -> raise Divergence
+         | RebuildFunc goal' -> run_attempt defs  goal' st
+         | Restart     defs' -> run_attempt defs' goal  st
+      in
+      run_attempt defs goal
+
+  end
+
 
 module ExtractDeepest = 
   struct
@@ -1143,7 +1205,7 @@ let refiner : 'a logic -> 'a refiner = fun x ans ->
 
 module LogicAdder = 
   struct
-    let zero f = run_prog f
+    let zero f = Interpretation.run_prog f
  
     let succ (prev: 'a -> State.t -> 'b) (f: 'c logic -> 'a) : State.t -> 'c refiner * 'b =
       call_fresh (fun logic st -> (refiner logic, prev (f logic) st))
