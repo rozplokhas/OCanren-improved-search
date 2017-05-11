@@ -82,6 +82,56 @@ module Stream =
 
   end
 
+module SupportStream =
+  struct
+
+    type 'a t = Nil | Diverge of bool | Cons of 'a * 'a t | Lazy of 'a t Lazy.t
+
+    let from_fun (f: unit -> 'a t) : 'a t = Lazy (Lazy.lazy_from_fun f)
+
+    let nil = Nil
+
+    let divergence = Diverge false
+
+    let cons h t = Cons (h, t)
+
+    let rec mplus fss gss =
+      from_fun (fun () ->
+        match fss with
+        | Nil           -> gss
+        | Diverge b     -> Diverge b
+        | Cons (x, xss) -> cons x (mplus xss gss)
+        | Lazy z        -> mplus gss (Lazy.force z) 
+      )
+
+    let rec bind ss f =
+      from_fun (fun () ->
+        match ss with
+        | Nil           -> nil
+        | Diverge _     -> Diverge true
+        | Cons (x, xss) -> mplus (f x) (bind xss f)
+        | Lazy z        -> bind (Lazy.force z) f
+      )
+
+    let rec catch ss hs =
+      from_fun (fun () ->
+        match ss with
+        | Nil           -> nil
+        | Diverge false -> Diverge false
+        | Diverge true  -> hs
+        | Cons (x, xss) -> Cons (x, catch xss hs)
+        | Lazy z        -> catch (Lazy.force z) hs
+      )
+
+    let rec to_stream ss hs =
+      match ss with
+      | Nil           -> Stream.nil
+      | Diverge _     -> hs
+      | Cons (x, xss) -> Stream.cons x (to_stream xss hs)
+      | Lazy z        -> Stream.from_fun (fun () -> to_stream (Lazy.force z) hs)
+
+  end
+
 let (!!!) = Obj.magic;;
 
 @type 'a logic = Ident of GT.int GT.list * GT.int | Var of GT.int GT.list * GT.int * 'a logic GT.list | Value of 'a with show, html, eq, compare, foldl, foldr, gmap
@@ -417,6 +467,35 @@ let run_unification x y (env, subst, constr) =
     end
   with Occurs_check -> Stream.nil
 
+let run_unification_sup x y (env, subst, constr) =
+  try
+    let prefix, subst' = Subst.unify env x y (Some subst) in
+    begin match subst' with
+    | None -> SupportStream.nil
+    | Some s -> 
+        try
+          (* TODO: only apply constraints with the relevant vars *)
+          let constr' =
+            List.fold_left (fun css' cs -> 
+              let x, t  = Subst.split cs in
+              try
+                let p, s' = Subst.unify env (!!!x) (!!!t) subst' in
+                match s' with
+                | None -> css'
+                | Some _ ->
+                    match p with
+                    | [] -> raise Disequality_violated
+                    | _  -> (Subst.of_list p)::css'
+              with Occurs_check -> css'
+            ) 
+            []
+            constr
+          in
+          SupportStream.cons (env, s, constr') SupportStream.nil
+        with Disequality_violated -> SupportStream.nil
+    end
+  with Occurs_check -> SupportStream.nil
+
 let run_disequality x y ((env, subst, constr) as st) =
   let normalize_store prefix constr =
     let subst  = Subst.of_list prefix in
@@ -450,10 +529,43 @@ let run_disequality x y ((env, subst, constr) as st) =
         )
   with Occurs_check -> Stream.cons st Stream.nil
 
+let run_disequality_sup x y ((env, subst, constr) as st) =
+  let normalize_store prefix constr =
+    let subst  = Subst.of_list prefix in
+    let prefix = List.split (List.map (fun (_, x, t) -> (x, t)) prefix) in
+    let subsumes subst (vs, ts) = 
+      try 
+        match Subst.unify env !!!vs !!!ts (Some subst) with
+        | [], Some _ -> true
+        | _ -> false
+      with Occurs_check -> false
+    in
+    let rec traverse = function
+    | [] -> [subst]
+    | (c::cs) as ccs -> 
+        if subsumes subst (Subst.split c)
+        then ccs
+        else if subsumes c prefix
+             then traverse cs
+             else c :: traverse cs
+    in
+    traverse constr
+  in
+  try 
+    let prefix, subst' = Subst.unify env x y (Some subst) in
+    match subst' with
+    | None -> SupportStream.cons st SupportStream.nil
+    | Some s -> 
+        (match prefix with
+        | [] -> SupportStream.nil
+        | _  -> SupportStream.cons (env, subst, normalize_store prefix constr) SupportStream.nil
+        )
+  with Occurs_check -> SupportStream.cons st SupportStream.nil
+
 type goal = 
 | Unification of term * term
 | Disequality of term * term
-| Conjunction of goal list
+| Conjunction of (goal * int) list
 | Disjunction of goal list
 | Fresh       of term * goal
 | Invoke      of string * term list
@@ -463,7 +575,7 @@ let (===) x y = Unification (term_of_logic x, term_of_logic y)
 
 let (=/=) x y = Disequality (term_of_logic x, term_of_logic y)
 
-let conj g1 g2 = Conjunction [g1; g2]
+let conj g1 g2 = Conjunction [(g1, 0); (g2, 0)]
 
 let (&&&) = conj
 
@@ -473,7 +585,7 @@ let (|||) = disj
 
 let rec (?|) gs = Disjunction gs 
 
-let rec (?&) gs = Conjunction gs
+let rec (?&) gs = Conjunction (List.map (fun g -> (g, 0)) gs)
 
 let conde = (?|)
 
@@ -980,6 +1092,8 @@ module Interpretation :
   sig
 
     val run_prog : program -> State.t -> State.t Stream.t
+
+    val final_run : program -> State.t -> State.t Stream.t
   
   end = 
   struct
@@ -1061,7 +1175,8 @@ module Interpretation :
     | Result of State.t list
     | Diverge
     | RebuildFunc of goal
-    | Restart of (term list * goal) Defs.t
+    (* | Restart of (term list * goal) Defs.t *)
+    | Restart of string * (term list * goal) Defs.t
 
     let process_result : (State.t list -> result) -> (goal -> result) -> result -> result =
       fun proc_result proc_rebuild -> 
@@ -1069,13 +1184,14 @@ module Interpretation :
         | Result      s    -> proc_result s
         | Diverge          -> Diverge
         | RebuildFunc g    -> proc_rebuild g
-        | Restart     defs -> Restart defs
+        (* | Restart     defs -> Restart defs *)
+        | Restart     (name, defs) -> Restart (name, defs)
 
     let rec pre_opt goal =
-      let rec expand_conj = function
-      | []                   -> []
-      | Conjunction gs :: tl -> gs @ expand_conj tl
-      | hd :: tl             -> hd :: expand_conj tl
+      let rec expand_conj : (goal * int) list -> (goal * int) list = function
+      | []                        -> []
+      | (Conjunction cs, i) :: tl -> cs @ expand_conj tl
+      | hd :: tl                  -> hd :: expand_conj tl
       in
       match goal with
       | Unification _     -> goal
@@ -1084,18 +1200,20 @@ module Interpretation :
       | Disjunction gs    -> Disjunction (List.map pre_opt gs)
       | Fresh      (x, g) -> Fresh (x, pre_opt g)
       | Marked      g     -> Marked (pre_opt g)
-      | Conjunction gs    -> Conjunction (expand_conj @@ List.map pre_opt gs)
+      | Conjunction cs    -> Conjunction (expand_conj @@ List.map (fun (g, i) -> (pre_opt g, i)) cs)
 
-    let run_prog (iset, defs, goal) =
+    let run_prog (iset, defs, goal) = 
       let defs, goal = List.map (fun (name, (args, body)) -> (name, (args, pre_opt body))) defs, pre_opt goal in
       let defs = List.fold_left (fun acc (k, x) -> Defs.add k x acc) Defs.empty defs in
-      let rec swap_first_unmarked : goal -> goal list -> (goal * goal list) option = fun sg ->
+      let rec swap_first_unmarked : goal * int -> (goal * int) list -> ((goal * int) * (goal * int) list) option = fun sg ->
         function
-        | []             -> None
-        | Marked g :: gs -> (match swap_first_unmarked sg gs with None -> None | Some (rg, gs') -> Some (rg, Marked g :: gs'))
-        | g        :: gs -> Some (g, Marked sg :: gs)
+        | []                  -> None
+        | (Marked g, i) :: gs -> (match swap_first_unmarked sg gs with None -> None | Some (rg, gs') -> Some (rg, (Marked g, i) :: gs'))
+        | (g, i)             :: gs -> let (a, b) = sg in Some ((g, i), (Marked a, b) :: gs)
       in
-      let rec run_goal : (term list * goal) Defs.t -> term Log.t -> IdentSet.t -> goal -> State.t -> result = fun defs log iset goal ((env, subst, constr) as st) ->
+      (* let rec run_goal : (term list * goal) Defs.t -> term Log.t -> IdentSet.t -> goal -> State.t -> result = fun defs log iset goal ((env, subst, constr) as st) -> *)
+      let rec run_goal : (term list * goal) Defs.t -> (term * int) Log.t -> IdentSet.t -> goal -> State.t -> result = fun defs log iset goal ((env, subst, constr) as st) ->
+
         match goal with
         | Unification (x, y)           -> Result (Stream.to_list (run_unification (logic_of_term @@ IdentSet.refine env iset x) 
                                                                                   (logic_of_term @@ IdentSet.refine env iset y) 
@@ -1114,55 +1232,189 @@ module Interpretation :
                                                                                       (run_goal defs log iset (Disjunction gs) st)) 
                                                          (fun g' -> RebuildFunc (Disjunction (g' :: gs))) 
                                                          (run_goal defs log iset g st)
-        | Conjunction [g]              -> process_result (fun ss -> Result ss) (fun g' -> RebuildFunc (Conjunction [g'])) (run_goal defs log iset g st)
-        | Conjunction (Marked g :: gs) -> run_goal defs log iset (Conjunction (g :: List.map (function Marked mg -> mg | g -> g) gs)) st
-        | Conjunction (g :: gs)        -> (
+        | Conjunction [(g, i)]              -> process_result (fun ss -> Result ss) (fun g' -> RebuildFunc (Conjunction [(g', i)])) (run_goal defs log iset g st)
+        | Conjunction ((Marked g, i) :: gs) -> run_goal defs log iset (Conjunction ((g, 0) :: List.map (function (Marked mg, i) -> (mg, i) | (g, i) -> (g, i)) gs)) st
+        | Conjunction ((g, i) :: gs)        -> (
                                              match run_goal defs log iset g st with
                                              | Result ss      ->
                                                  List.fold_right (fun s -> function
                                                                            | Result acc -> process_result (fun s_res -> Result (s_res @ acc)) 
-                                                                                                          (function (Conjunction gs') -> RebuildFunc (Conjunction (g :: gs')))
+                                                                                                          (function (Conjunction gs') -> RebuildFunc (Conjunction ((g, i) :: gs')))
                                                                                                           (run_goal defs log iset (Conjunction gs) s) 
                                                                            | res -> res
                                                                  ) ss (Result [])
                                              | Diverge        -> (
-                                                                    match swap_first_unmarked g gs with 
+                                                                    match swap_first_unmarked (g, i) gs with 
                                                                     | None -> Diverge
                                                                     | Some (g', gs') -> RebuildFunc (Conjunction (g' :: gs'))
                                                                  )
-                                             | RebuildFunc g' -> RebuildFunc (Conjunction (g' :: gs))
-                                             | Restart defs'  -> Restart defs'
+                                             | RebuildFunc g' -> RebuildFunc (Conjunction ((g', i) :: gs))
+                                             (* | Restart defs'  -> Restart defs' *)
+                                             | Restart (name, defs')  -> Restart (name, defs')
                                           )
-        | Invoke (name, arg_vals)      -> let arg_vals_refined = List.map (fun av -> term_of_logic (refine st (logic_of_term (IdentSet.refine env iset av)))) arg_vals
+        | Invoke (name, arg_vals)      -> 
+                                          let arg_vals_refined = List.map (fun av -> term_of_logic (refine st (logic_of_term (IdentSet.refine env iset av)))) arg_vals
                                           in
                                           let new_log = try 
-                                                          let old_vals = Log.find name log in
+                                                (* let old_vals = Log.find name log in *)
+                                                          let (old_vals, lev) = Log.find name log in
                                                           if is_reducible env (!!! arg_vals_refined) (!!! old_vals)
-                                                            then None
-                                                            else Some (Log.add name (!!! arg_vals_refined) log)
-                                                        with Not_found -> Some (Log.add name (!!! arg_vals_refined) log)
+                                                            (* then None *)
+                                                            then (Printf.printf "Level of divergence %d\n" lev; None)
+                                                            (* else Some (Log.add name (!!! arg_vals_refined) log) *)
+                                                            else Some (Log.add name (!!! arg_vals_refined, lev + 1) log)
+                                                        (* with Not_found -> Some (Log.add name (!!! arg_vals_refined) log) *)
+                                                        with Not_found -> Some (Log.add name (!!! arg_vals_refined, 0) log)
                                           in
                                           match new_log with
-                                          | None         -> Diverge
+                                          | None      -> Diverge
                                           | Some log' -> let arg_names, body = Defs.find name defs in
                                                          let iset' = List.fold_left2 (fun is an av -> IdentSet.bind_ident an av is) 
                                                                                      iset 
                                                                                      arg_names 
                                                                                      arg_vals_refined
                                                          in
-                                                         process_result (fun ss -> Result ss)
-                                                                        (fun body' -> Restart (Defs.add name (arg_names, body') defs))
-                                                                        (run_goal defs log' iset' body st)
+                                                         match run_goal defs log' iset' body st with
+                                                         | Result ss -> Result ss
+                                                         | Diverge -> Diverge
+                                                         | RebuildFunc body' -> let defs' = Defs.add name (arg_names, body') defs
+                                                                                in (if Log.mem name log 
+                                                                                        then run_goal defs' log iset (Invoke (name, arg_vals)) st (* Restart (name, defs') *)  
+                                                                                        else run_goal defs' log iset (Invoke (name, arg_vals)) st)
+                                                         | Restart (name, defs') -> (if Log.mem name log 
+                                                                                        then Restart (name, defs') 
+                                                                                        else run_goal defs' log iset (Invoke (name, arg_vals)) st)
+
+                                                         (* process_result (fun ss -> Result ss)
+                                                                        (* (fun body' -> Restart (Defs.add name (arg_names, body') defs)) *)
+                                                                        (fun body' -> Restart (name, Defs.add name (arg_names, body') defs))
+                                                                        (run_goal defs log' iset' body st) *)
       in
       let rec run_attempt : (term list * goal) Defs.t -> goal -> State.t -> State.t Stream.t = fun defs goal st ->
          match run_goal defs Log.empty iset goal st with
          | Result      ss    -> Stream.of_list ss
          | Diverge           -> raise Divergence
          | RebuildFunc goal' -> run_attempt defs  goal' st
-         | Restart     defs' -> run_attempt defs' goal  st
+         | Restart    (_, defs') -> run_attempt defs' goal  st
       in
       run_attempt defs goal
 
+    type context =
+    | Hole
+    | ConjunctionS of context
+    | ConjunctionL of (context * int) * (goal * int) list
+    | ConjunctionR of (goal * int) * context
+    | DisjunctionS of context
+    | DisjunctionL of context * goal list
+    | DisjunctionR of goal * context
+    | Fresh        of term * context
+
+    let rec print_context = function
+    | Hole -> Printf.printf "[]"
+    | ConjunctionS c -> Printf.printf "CS ("; print_context c; Printf.printf ")"
+    | ConjunctionL ((c, _), _)  -> Printf.printf "CL ("; print_context c; Printf.printf ", _)"
+    | ConjunctionR (_, c) -> Printf.printf "CR (_, "; print_context c; Printf.printf ")"
+    | DisjunctionS c -> Printf.printf "DS ("; print_context c; Printf.printf ")"
+    | DisjunctionL (c, _) -> Printf.printf "DL ("; print_context c; Printf.printf ", _)"
+    | DisjunctionR (_, c) -> Printf.printf "DR (_, "; print_context c; Printf.printf ")"
+    | Fresh (_, c) -> Printf.printf "FR ("; print_context c; Printf.printf ")"
+
+    let rec plug_in_context g = function
+    | Hole                          -> g
+    | ConjunctionS cntxt            -> plug_in_context (Conjunction [(g, 0)]) cntxt (* Conjunction [(plug_in_context g cntxt, 0)] *)
+    | ConjunctionL ((cntxt, i), cs) -> plug_in_context (Conjunction ((g, i) :: cs)) cntxt  (* Conjunction ((plug_in_context g cntxt, i) :: cs) *)
+    | ConjunctionR (c, cntxt)       -> let Conjunction cs = g in plug_in_context (Conjunction (c :: cs)) cntxt (* let Conjunction cs = plug_in_context g cntxt in Conjunction (c :: cs) *)
+    | DisjunctionS cntxt            -> plug_in_context (Disjunction [g]) cntxt (* Disjunction [plug_in_context g cntxt] *)
+    | DisjunctionL (cntxt, gs)      -> plug_in_context (Disjunction (g :: gs)) cntxt   (* Disjunction (plug_in_context g cntxt :: gs) *)
+    | DisjunctionR (hg, cntxt)      -> let Disjunction gs = g in plug_in_context (Disjunction (hg :: gs)) cntxt  (* let Disjunction gs = plug_in_context g cntxt in Disjunction (hg :: gs) *)
+    | Fresh        (t, cntxt)       -> plug_in_context (Fresh (t, g)) cntxt (* Fresh (t, plug_in_context g cntxt) *)
+
+    type cop = (string * term list * context) option
+
+    let upd_cop : (context -> context) -> cop -> cop = fun f -> function
+    | None -> None
+    | Some (name, arg_names, c) -> Some (name, arg_names, f c)
+
+    let rec restart_order : (goal * int) list -> (goal * int) list =
+      let rec insert : 'a -> int -> 'a list -> 'a list = fun e i xs ->
+        match i, xs with
+        | 0, _      -> e :: xs
+        | _, []     -> [e]
+        | _, hd::tl -> hd :: insert e (i - 1) tl
+      in function
+      | []           -> []
+      | (g, i) :: cs -> insert (g, 0) i (restart_order cs)
+
+    let rec swap : 'a -> int -> 'a list -> ('a * 'a list) = fun e i xs ->
+      match i, xs with
+      | 0, r::tl -> (r, e::tl)
+      | _, x::tl -> let (r, xs') = swap e (i - 1) tl in (r, x::xs')
+
+    let rec run : bool -> (term list * goal) Defs.t -> cop -> term Log.t -> IdentSet.t -> goal -> State.t -> State.t SupportStream.t =
+      fun mode defs cop log iset goal ((env, subst, constr) as st) ->
+        match goal with
+        | Unification (x, y)           -> run_unification_sup (logic_of_term @@ IdentSet.refine env iset x) 
+                                                              (logic_of_term @@ IdentSet.refine env iset y) 
+                                                              st
+        | Disequality (x, y)           -> run_disequality_sup (logic_of_term @@ IdentSet.refine env iset x) 
+                                                              (logic_of_term @@ IdentSet.refine env iset y)
+                                                              st
+        | Marked       g               -> run mode defs cop log iset g st
+        | Fresh       (x, g)           -> let var, env' = Env.fresh env in
+                                          let new_iset = IdentSet.bind_ident x (term_of_logic var) iset in
+                                          run mode defs (upd_cop (fun c -> Fresh (x, c)) cop) log new_iset g (env', subst, constr)
+        | Disjunction [g]              -> run mode defs (upd_cop (fun c -> DisjunctionS c) cop) log iset g st
+        | Disjunction (g :: gs)        -> let lss = run mode defs (upd_cop (fun c -> DisjunctionL (c, gs)) cop) log iset g st in
+                                          let rss = run mode defs (upd_cop (fun c -> DisjunctionR (g, c)) cop) log iset (Disjunction gs) st in
+                                          SupportStream.mplus lss rss
+        | Conjunction [(g, _)]         -> run mode defs (upd_cop (fun c -> ConjunctionS c) cop) log iset g st
+        | Conjunction ((g, i) :: cs)   -> let lss = run mode defs (upd_cop (fun c -> ConjunctionL ((c, i), cs)) cop) log iset g st in
+                                          let rssf = run mode defs (upd_cop (fun c -> ConjunctionR ((g, i), c)) cop) log iset (Conjunction cs) in
+                                          let handler = SupportStream.from_fun (fun () -> 
+                                            if List.length cs <= i
+                                            then SupportStream.divergence
+                                            else
+                                              let init_order = restart_order cs in
+                                              let ((g', _), cs') = swap (g, 0) i init_order in
+                                              let new_goal = Conjunction ((g', i + 1) :: cs') in
+                                              let new_defs = match cop with 
+                                                             | None -> defs 
+                                                             | Some (name, arg_names, cntxt) -> Defs.add name (arg_names, ((*print_context cntxt; Printf.printf "\n";*) plug_in_context new_goal cntxt)) defs
+                                              in
+                                              run mode new_defs cop log iset new_goal st
+                                          ) in
+                                          SupportStream.catch (SupportStream.bind lss rssf) handler
+        | Invoke (name, arg_vals)      -> SupportStream.from_fun (fun () ->
+                                            let arg_vals_refined = List.map (fun av -> term_of_logic (refine st (logic_of_term (IdentSet.refine env iset av)))) arg_vals
+                                            in
+                                            let new_log =
+                                              if mode
+                                              then
+                                                try
+                                                  let old_vals = Log.find name log in
+                                                  if is_reducible env (!!! arg_vals_refined) (!!! old_vals)
+                                                    then ((*Printf.printf "Divergence\n";*) None)
+                                                    else Some (Log.add name (!!! arg_vals_refined) log)
+                                                with Not_found -> Some (Log.add name (!!! arg_vals_refined) log)
+                                              else Some log
+                                            in
+                                            match new_log with
+                                            | None      -> SupportStream.divergence
+                                            | Some log' -> let arg_names, body = Defs.find name defs in
+                                                           let iset' = List.fold_left2 (fun is an av -> IdentSet.bind_ident an av is) 
+                                                                                       iset 
+                                                                                       arg_names 
+                                                                                       arg_vals_refined
+                                                           in
+                                                           run mode defs (Some (name, arg_names, Hole)) log' iset' body st
+                                         )
+
+    let final_run (iset, defs, goal) st =
+      let defs, goal = List.map (fun (name, (args, body)) -> (name, (args, pre_opt body))) defs, pre_opt goal in
+      let defs = List.fold_left (fun acc (k, x) -> Defs.add k x acc) Defs.empty defs in
+      SupportStream.to_stream
+        (run true defs None Log.empty iset goal st)
+        (SupportStream.to_stream (run false defs None Log.empty iset goal st) Stream.nil)
   end
 
 
@@ -1205,7 +1457,7 @@ let refiner : 'a logic -> 'a refiner = fun x ans ->
 
 module LogicAdder = 
   struct
-    let zero f = Interpretation.run_prog f
+    let zero f = (*Interpretation.run_prog*) Interpretation.final_run f
  
     let succ (prev: 'a -> State.t -> 'b) (f: 'c logic -> 'a) : State.t -> 'c refiner * 'b =
       call_fresh (fun logic st -> (refiner logic, prev (f logic) st))

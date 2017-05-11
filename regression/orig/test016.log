@@ -9,17 +9,10 @@ fun q -> prog id_set0 [a_and_b'] (invoke "a_and_b'" ((!^) q)), all answers {
 q=6; 
 q=5; 
 }
-fun q -> prog id_set0 [fives] (invoke "fives" ((!^) q)), 10 answers {
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
-q=5; 
+fun q ->
+  prog id_set0 [appendo]
+    (invoke "appendo" ((^~) (inj_list [1; 2]) ((^.) (inj_list [3; 4]) q))), all answers {
+q=[1; 2; 3; 4]; 
 }
 fun q ->
   prog id_set0 [appendo]
@@ -27,325 +20,83 @@ fun q ->
        ((^~) q ((^.) (inj_list [3; 4]) (inj_list [1; 2; 3; 4])))), all answers {
 q=[1; 2]; 
 }
+fun q ->
+  prog id_set0 [appendo]
+    (invoke "appendo"
+       ((^~) (inj_list [1; 2]) ((^.) q (inj_list [1; 2; 3; 4])))), all answers {
+q=[3; 4]; 
+}
 fun q r ->
-  prog id_set0 [appendo] (invoke "appendo" ((^~) q ((^.) (inj_list []) r))), 4 answers {
-q=[]; r=[]; 
-q=[_.13]; r=[_.13]; 
-q=[_.13; _.16]; r=[_.13; _.16]; 
-q=[_.13; _.16; _.19]; r=[_.13; _.16; _.19]; 
+  prog id_set0 [appendo]
+    (invoke "appendo" ((^~) q ((^.) r (inj_list [1; 2; 3; 4])))), all answers {
+q=[]; r=[1; 2; 3; 4]; 
+q=[1]; r=[2; 3; 4]; 
+q=[1; 2]; r=[3; 4]; 
+q=[1; 2; 3]; r=[4]; 
+q=[1; 2; 3; 4]; r=[]; 
 }
 fun q ->
-  prog id_set1 [appendo; reverso]
-    (invoke "reverso" ((^.) q (inj_list [1; 2; 3; 4]))), all answers {
-q=[4; 3; 2; 1]; 
+  prog id_set1 reverso_list
+    (invoke "reverso" ((^.) q (inj_list [5; 4; 3; 2; 1]))), all answers {
+q=[1; 2; 3; 4; 5]; 
 }
 fun q ->
-  prog id_set1 [appendo; reverso]
-    (invoke "reverso" ((^.) (inj_list []) (inj_list []))), all answers {
+  prog id_set1 reverso_list
+    (invoke "reverso" ((^.) (inj_list [1; 2; 3; 4; 5]) q)), all answers {
+q=[5; 4; 3; 2; 1]; 
+}
+fun q ->
+  prog id_set1 reverso_list
+    (invoke "reverso" ((^.) (inj_list [1; 2; 3]) (inj_list [3; 2; 1]))), all answers {
 q=_.10; 
 }
 fun q ->
-  prog id_set1 [appendo; reverso]
-    (invoke "reverso" ((^.) (inj_list [1; 2; 3; 4]) q)), all answers {
-q=[4; 3; 2; 1]; 
-}
-fun q -> prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) q q)), 1 answer {
-q=[]; 
-}
-fun q -> prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) q q)), 2 answers {
-q=[]; 
-q=[_.12]; 
-}
-fun q -> prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) q q)), 3 answers {
-q=[]; 
-q=[_.12]; 
-q=[_.19; _.19]; 
-}
-fun q -> prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) q q)), 10 answers {
-q=[]; 
-q=[_.12]; 
-q=[_.19; _.19]; 
-q=[_.29; _.22; _.29]; 
-q=[_.42; _.35; _.35; _.42]; 
-q=[_.58; _.51; _.41; _.51; _.58]; 
-q=[_.77; _.70; _.60; _.60; _.70; _.77]; 
-q=[_.99; _.92; _.82; _.69; _.82; _.92; _.99]; 
-q=[_.124; _.117; _.107; _.94; _.94; _.107; _.117; _.124]; 
-q=[_.152; _.145; _.135; _.122; _.106; _.122; _.135; _.145; _.152]; 
+  prog id_set1 reverso_list
+    (invoke "reverso" ((^.) (inj_list [1; 2; 1]) (inj_list [3; 2; 1]))), all answers {
 }
 fun q ->
-  prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) q (inj_list [1]))), all answers {
-q=[1]; 
-}
-fun q ->
-  prog id_set1 [appendo; reverso] (invoke "reverso" ((^.) (inj_list [1]) q)), all answers {
-q=[1]; 
-}
-fun q ->
-  prog id_set2 [gto; leo; minimumo]
+  prog id_set2 minimumo_list
     (invoke "minimumo" ((^.) (inj_nat_list [6; 5; 4; 1; 2]) q)), all answers {
-q=S (O ()); 
+q=1; 
 }
 fun q ->
-  prog id_set2 [gto; leo; minimumo] (invoke "minimumo" ((^.) q (inj_nat 4))), 5 answers {
-q=[S (S (S (S (O ()))))]; 
-q=[S (S (S (S (O ())))); S (S (S (S (_.20))))]; 
-q=[S (S (S (S (_.20 [=/= O ()])))); S (S (S (S (O ()))))]; 
-q=[S (S (S (S (O ())))); S (S (S (S (O ())))); S (S (S (S (_.31))))]; 
-q=[S (S (S (S (_.20 [=/= O ()])))); S (S (S (S (O ())))); S (S (S (S (_.31))))]; 
+  prog id_set2 minimumo_list (invoke "minimumo" ((^.) (inj_nat_list []) q)), all answers {
 }
 fun q ->
-  prog id_set2 [leo; gto; minmaxo; smallesto; sorto]
-    (invoke "sorto" ((^.) (inj_nat_list [10; 9; 8; 7; 6; 5; 4; 3; 2; 1]) q)), all answers {
-q=[1; 2; 3; 4; 5; 6; 7; 8; 9; 10]; 
+  prog id_set2 [pluso]
+    (invoke "pluso" ((^~) (inj_nat 6) ((^.) (inj_nat 4) q))), all answers {
+q=10; 
+}
+fun q r ->
+  prog id_set2 [pluso] (invoke "pluso" ((^~) q ((^.) r (inj_nat 10)))), all answers {
+q=0; r=10; 
+q=1; r=9; 
+q=2; r=8; 
+q=3; r=7; 
+q=4; r=6; 
+q=5; r=5; 
+q=6; r=4; 
+q=7; r=3; 
+q=8; r=2; 
+q=9; r=1; 
+q=10; r=0; 
 }
 fun q ->
-  prog id_set2 [leo; gto; minmaxo; smallesto; sorto]
-    (invoke "sorto" ((^.) q (inj_nat_list [1; 2; 3; 4; 5]))), all answers {
-q=[3; 4; 1; 2; 5]; 
-q=[3; 4; 2; 1; 5]; 
-q=[3; 4; 1; 5; 2]; 
-q=[3; 4; 2; 5; 1]; 
-q=[2; 3; 4; 1; 5]; 
-q=[1; 3; 4; 2; 5]; 
-q=[3; 2; 4; 1; 5]; 
-q=[2; 3; 4; 5; 1]; 
-q=[2; 3; 1; 4; 5]; 
-q=[1; 2; 3; 4; 5]; 
-q=[2; 1; 3; 4; 5]; 
-q=[1; 3; 2; 4; 5]; 
-q=[3; 1; 4; 2; 5]; 
-q=[1; 2; 4; 3; 5]; 
-q=[2; 1; 4; 3; 5]; 
-q=[2; 3; 1; 5; 4]; 
-q=[3; 1; 2; 4; 5]; 
-q=[3; 2; 4; 5; 1]; 
-q=[1; 3; 4; 5; 2]; 
-q=[3; 2; 1; 4; 5]; 
-q=[2; 1; 3; 5; 4]; 
-q=[1; 2; 3; 5; 4]; 
-q=[2; 1; 4; 5; 3]; 
-q=[1; 3; 2; 5; 4]; 
-q=[3; 1; 4; 5; 2]; 
-q=[1; 2; 4; 5; 3]; 
-q=[3; 2; 1; 5; 4]; 
-q=[3; 1; 2; 5; 4]; 
-q=[2; 4; 3; 1; 5]; 
-q=[2; 4; 1; 3; 5]; 
-q=[1; 4; 2; 3; 5]; 
-q=[1; 4; 3; 2; 5]; 
-q=[2; 4; 3; 5; 1]; 
-q=[2; 4; 1; 5; 3]; 
-q=[1; 4; 2; 5; 3]; 
-q=[1; 4; 3; 5; 2]; 
-q=[3; 4; 5; 1; 2]; 
-q=[3; 4; 5; 2; 1]; 
-q=[2; 3; 5; 1; 4]; 
-q=[2; 3; 5; 4; 1]; 
-q=[1; 3; 5; 2; 4]; 
-q=[3; 2; 5; 1; 4]; 
-q=[2; 1; 5; 3; 4]; 
-q=[1; 2; 5; 3; 4]; 
-q=[2; 1; 5; 4; 3]; 
-q=[1; 3; 5; 4; 2]; 
-q=[3; 1; 5; 2; 4]; 
-q=[1; 2; 5; 4; 3]; 
-q=[3; 2; 5; 4; 1]; 
-q=[3; 1; 5; 4; 2]; 
-q=[2; 4; 5; 1; 3]; 
-q=[2; 4; 5; 3; 1]; 
-q=[1; 4; 5; 2; 3]; 
-q=[1; 4; 5; 3; 2]; 
-q=[4; 2; 3; 1; 5]; 
-q=[4; 1; 2; 3; 5]; 
-q=[4; 2; 1; 3; 5]; 
-q=[4; 1; 3; 2; 5]; 
-q=[4; 2; 3; 5; 1]; 
-q=[4; 1; 2; 5; 3]; 
-q=[4; 2; 1; 5; 3]; 
-q=[4; 1; 3; 5; 2]; 
-q=[4; 3; 1; 2; 5]; 
-q=[4; 3; 2; 1; 5]; 
-q=[4; 3; 1; 5; 2]; 
-q=[4; 3; 2; 5; 1]; 
-q=[4; 2; 5; 1; 3]; 
-q=[4; 1; 5; 2; 3]; 
-q=[4; 2; 5; 3; 1]; 
-q=[4; 1; 5; 3; 2]; 
-q=[4; 3; 5; 1; 2]; 
-q=[4; 3; 5; 2; 1]; 
-q=[5; 2; 3; 1; 4]; 
-q=[5; 1; 2; 3; 4]; 
-q=[5; 2; 1; 3; 4]; 
-q=[5; 1; 3; 2; 4]; 
-q=[5; 2; 3; 4; 1]; 
-q=[5; 1; 2; 4; 3]; 
-q=[5; 2; 1; 4; 3]; 
-q=[5; 1; 3; 4; 2]; 
-q=[5; 3; 1; 2; 4]; 
-q=[5; 3; 2; 1; 4]; 
-q=[5; 3; 1; 4; 2]; 
-q=[5; 3; 2; 4; 1]; 
-q=[5; 2; 4; 1; 3]; 
-q=[5; 1; 4; 2; 3]; 
-q=[5; 2; 4; 3; 1]; 
-q=[5; 1; 4; 3; 2]; 
-q=[5; 3; 4; 1; 2]; 
-q=[5; 3; 4; 2; 1]; 
-q=[3; 5; 1; 2; 4]; 
-q=[3; 5; 2; 1; 4]; 
-q=[3; 5; 1; 4; 2]; 
-q=[3; 5; 2; 4; 1]; 
-q=[2; 5; 3; 1; 4]; 
-q=[2; 5; 1; 3; 4]; 
-q=[1; 5; 2; 3; 4]; 
-q=[1; 5; 3; 2; 4]; 
-q=[2; 5; 3; 4; 1]; 
-q=[2; 5; 1; 4; 3]; 
-q=[1; 5; 2; 4; 3]; 
-q=[1; 5; 3; 4; 2]; 
-q=[3; 5; 4; 1; 2]; 
-q=[3; 5; 4; 2; 1]; 
-q=[2; 5; 4; 1; 3]; 
-q=[2; 5; 4; 3; 1]; 
-q=[1; 5; 4; 2; 3]; 
-q=[1; 5; 4; 3; 2]; 
-q=[5; 4; 1; 2; 3]; 
-q=[5; 4; 2; 1; 3]; 
-q=[5; 4; 1; 3; 2]; 
-q=[5; 4; 2; 3; 1]; 
-q=[5; 4; 3; 1; 2]; 
-q=[5; 4; 3; 2; 1]; 
-q=[4; 5; 1; 2; 3]; 
-q=[4; 5; 2; 1; 3]; 
-q=[4; 5; 1; 3; 2]; 
-q=[4; 5; 2; 3; 1]; 
-q=[4; 5; 3; 1; 2]; 
-q=[4; 5; 3; 2; 1]; 
+  prog id_set2 [pluso; mulo]
+    (invoke "mulo" ((^~) (inj_nat 3) ((^.) (inj_nat 5) q))), all answers {
+q=15; 
 }
-fun q ->
-  prog id_set2 [leo; gto; minmaxo; smallesto; sorto; perm]
-    (invoke "perm" ((^.) q (inj_nat_list [4; 2; 5; 1; 3]))), all answers {
-q=[3; 4; 1; 2; 5]; 
-q=[3; 4; 2; 1; 5]; 
-q=[3; 4; 1; 5; 2]; 
-q=[3; 4; 2; 5; 1]; 
-q=[2; 3; 4; 1; 5]; 
-q=[1; 3; 4; 2; 5]; 
-q=[3; 2; 4; 1; 5]; 
-q=[2; 3; 4; 5; 1]; 
-q=[2; 3; 1; 4; 5]; 
-q=[1; 2; 3; 4; 5]; 
-q=[2; 1; 3; 4; 5]; 
-q=[1; 3; 2; 4; 5]; 
-q=[3; 1; 4; 2; 5]; 
-q=[1; 2; 4; 3; 5]; 
-q=[2; 1; 4; 3; 5]; 
-q=[2; 3; 1; 5; 4]; 
-q=[3; 1; 2; 4; 5]; 
-q=[3; 2; 4; 5; 1]; 
-q=[1; 3; 4; 5; 2]; 
-q=[3; 2; 1; 4; 5]; 
-q=[2; 1; 3; 5; 4]; 
-q=[1; 2; 3; 5; 4]; 
-q=[2; 1; 4; 5; 3]; 
-q=[1; 3; 2; 5; 4]; 
-q=[3; 1; 4; 5; 2]; 
-q=[1; 2; 4; 5; 3]; 
-q=[3; 2; 1; 5; 4]; 
-q=[3; 1; 2; 5; 4]; 
-q=[2; 4; 3; 1; 5]; 
-q=[2; 4; 1; 3; 5]; 
-q=[1; 4; 2; 3; 5]; 
-q=[1; 4; 3; 2; 5]; 
-q=[2; 4; 3; 5; 1]; 
-q=[2; 4; 1; 5; 3]; 
-q=[1; 4; 2; 5; 3]; 
-q=[1; 4; 3; 5; 2]; 
-q=[3; 4; 5; 1; 2]; 
-q=[3; 4; 5; 2; 1]; 
-q=[2; 3; 5; 1; 4]; 
-q=[2; 3; 5; 4; 1]; 
-q=[1; 3; 5; 2; 4]; 
-q=[3; 2; 5; 1; 4]; 
-q=[2; 1; 5; 3; 4]; 
-q=[1; 2; 5; 3; 4]; 
-q=[2; 1; 5; 4; 3]; 
-q=[1; 3; 5; 4; 2]; 
-q=[3; 1; 5; 2; 4]; 
-q=[1; 2; 5; 4; 3]; 
-q=[3; 2; 5; 4; 1]; 
-q=[3; 1; 5; 4; 2]; 
-q=[2; 4; 5; 1; 3]; 
-q=[2; 4; 5; 3; 1]; 
-q=[1; 4; 5; 2; 3]; 
-q=[1; 4; 5; 3; 2]; 
-q=[4; 2; 3; 1; 5]; 
-q=[4; 1; 2; 3; 5]; 
-q=[4; 2; 1; 3; 5]; 
-q=[4; 1; 3; 2; 5]; 
-q=[4; 2; 3; 5; 1]; 
-q=[4; 1; 2; 5; 3]; 
-q=[4; 2; 1; 5; 3]; 
-q=[4; 1; 3; 5; 2]; 
-q=[4; 3; 1; 2; 5]; 
-q=[4; 3; 2; 1; 5]; 
-q=[4; 3; 1; 5; 2]; 
-q=[4; 3; 2; 5; 1]; 
-q=[4; 2; 5; 1; 3]; 
-q=[4; 1; 5; 2; 3]; 
-q=[4; 2; 5; 3; 1]; 
-q=[4; 1; 5; 3; 2]; 
-q=[4; 3; 5; 1; 2]; 
-q=[4; 3; 5; 2; 1]; 
-q=[5; 2; 3; 1; 4]; 
-q=[5; 1; 2; 3; 4]; 
-q=[5; 2; 1; 3; 4]; 
-q=[5; 1; 3; 2; 4]; 
-q=[5; 2; 3; 4; 1]; 
-q=[5; 1; 2; 4; 3]; 
-q=[5; 2; 1; 4; 3]; 
-q=[5; 1; 3; 4; 2]; 
-q=[5; 3; 1; 2; 4]; 
-q=[5; 3; 2; 1; 4]; 
-q=[5; 3; 1; 4; 2]; 
-q=[5; 3; 2; 4; 1]; 
-q=[5; 2; 4; 1; 3]; 
-q=[5; 1; 4; 2; 3]; 
-q=[5; 2; 4; 3; 1]; 
-q=[5; 1; 4; 3; 2]; 
-q=[5; 3; 4; 1; 2]; 
-q=[5; 3; 4; 2; 1]; 
-q=[3; 5; 1; 2; 4]; 
-q=[3; 5; 2; 1; 4]; 
-q=[3; 5; 1; 4; 2]; 
-q=[3; 5; 2; 4; 1]; 
-q=[2; 5; 3; 1; 4]; 
-q=[2; 5; 1; 3; 4]; 
-q=[1; 5; 2; 3; 4]; 
-q=[1; 5; 3; 2; 4]; 
-q=[2; 5; 3; 4; 1]; 
-q=[2; 5; 1; 4; 3]; 
-q=[1; 5; 2; 4; 3]; 
-q=[1; 5; 3; 4; 2]; 
-q=[3; 5; 4; 1; 2]; 
-q=[3; 5; 4; 2; 1]; 
-q=[2; 5; 4; 1; 3]; 
-q=[2; 5; 4; 3; 1]; 
-q=[1; 5; 4; 2; 3]; 
-q=[1; 5; 4; 3; 2]; 
-q=[5; 4; 1; 2; 3]; 
-q=[5; 4; 2; 1; 3]; 
-q=[5; 4; 1; 3; 2]; 
-q=[5; 4; 2; 3; 1]; 
-q=[5; 4; 3; 1; 2]; 
-q=[5; 4; 3; 2; 1]; 
-q=[4; 5; 1; 2; 3]; 
-q=[4; 5; 2; 1; 3]; 
-q=[4; 5; 1; 3; 2]; 
-q=[4; 5; 2; 3; 1]; 
-q=[4; 5; 3; 1; 2]; 
-q=[4; 5; 3; 2; 1]; 
+fun q r ->
+  prog id_set2 [pluso; mulo] (invoke "mulo" ((^~) q ((^.) r (inj_nat 36)))), all answers {
+q=1; r=36; 
+q=2; r=18; 
+q=3; r=12; 
+q=4; r=9; 
+q=6; r=6; 
+q=9; r=4; 
+q=12; r=3; 
+q=18; r=2; 
+q=36; r=1; 
 }
 fun q ->
   prog id_set2 [map_succ]
@@ -360,60 +111,51 @@ fun q ->
 q=[0; 1; 2; 3; 4; 5; 6; 7; 8; 9]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso]
+  prog id_set3 bin_pluso_list
     (invoke "bin_pluso" ((^~) (to_bin 3) ((^.) (to_bin 6) q))), all answers {
 q=[1; 0; 0; 1]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso]
+  prog id_set3 bin_pluso_list
     (invoke "bin_pluso" ((^~) (to_bin 2) ((^.) q (to_bin 5)))), all answers {
 q=[1; 1]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso]
+  prog id_set3 bin_pluso_list
     (invoke "bin_pluso" ((^~) (to_bin 8) ((^.) q (to_bin 6)))), all answers {
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso]
+  prog id_set3 bin_pluso_list
     (invoke "bin_pluso" ((^~) q ((^.) (to_bin 5) (to_bin 8)))), all answers {
 q=[1; 1]; 
 }
 fun q r ->
-  prog id_set3 [poso; bin_pluso]
+  prog id_set3 bin_pluso_list
     (invoke "bin_pluso" ((^~) q ((^.) r (to_bin 5)))), all answers {
 q=[1; 0; 1]; r=[]; 
 q=[]; r=[1; 0; 1]; 
 q=[0; 0; 1]; r=[1]; 
+q=[0; 1]; r=[1; 1]; 
 q=[1]; r=[0; 0; 1]; 
 q=[1; 1]; r=[0; 1]; 
-q=[0; 1]; r=[1; 1]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
+  prog id_set3 bin_multo_list
     (invoke "bin_multo" ((^~) (to_bin 5) ((^.) (to_bin 3) q))), all answers {
 q=[1; 1; 1; 1]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
+  prog id_set3 bin_multo_list
     (invoke "bin_multo" ((^~) q ((^.) (to_bin 3) (to_bin 12)))), all answers {
 q=[0; 0; 1]; 
 }
 fun q ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
+  prog id_set3 bin_multo_list
     (invoke "bin_multo" ((^~) (to_bin 3) ((^.) q (to_bin 12)))), all answers {
 q=[0; 0; 1]; 
 }
-fun q ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
-    (invoke "bin_multo" ((^~) q ((^.) q (to_bin 16)))), all answers {
-q=[0; 0; 1]; 
-}
-fun q ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
-    (invoke "bin_multo" ((^~) q ((^.) q (to_bin 15)))), all answers {
-}
 fun q r ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
+  prog id_set3 bin_multo_list
     (invoke "bin_multo" ((^~) q ((^.) r (to_bin 24)))), all answers {
 q=[0; 0; 0; 1; 1]; r=[1]; 
 q=[0; 0; 1; 1]; r=[0; 1]; 
@@ -424,17 +166,70 @@ q=[0; 1]; r=[0; 0; 1; 1];
 q=[0; 0; 1]; r=[0; 1; 1]; 
 q=[0; 0; 0; 1]; r=[1; 1]; 
 }
+fun q ->
+  prog id_set3 bin_lto_list (invoke "bin_lto" ((^.) (to_bin 5) (to_bin 10))), all answers {
+q=_.10; 
+}
+fun q ->
+  prog id_set3 bin_lto_list (invoke "bin_lto" ((^.) (to_bin 6) (to_bin 6))), all answers {
+}
+fun q ->
+  prog id_set3 bin_lto_list (invoke "bin_lto" ((^.) (to_bin 15) (to_bin 4))), all answers {
+}
+fun q -> prog id_set3 bin_lto_list (invoke "bin_lto" ((^.) q (to_bin 13))), all answers {
+q=[]; 
+q=[0; 0; 1; 1]; 
+q=[0; 0; 0; 1]; 
+q=[0; 0; 1]; 
+q=[0; 1; 0; 1]; 
+q=[0; 1]; 
+q=[0; 1; 1]; 
+q=[1]; 
+q=[1; 0; 0; 1]; 
+q=[1; 0; 1]; 
+q=[1; 1; 0; 1]; 
+q=[1; 1]; 
+q=[1; 1; 1]; 
+}
+fun q r ->
+  prog id_set3 bin_divo_list
+    (invoke "bin_divo" ((^~) (to_bin 21) ((^~) (to_bin 7) ((^.) q r)))), all answers {
+q=[1; 1]; r=[]; 
+}
+fun q r ->
+  prog id_set3 bin_divo_list
+    (invoke "bin_divo" ((^~) (to_bin 23) ((^~) (to_bin 5) ((^.) q r)))), all answers {
+q=[0; 0; 1]; r=[1; 1]; 
+}
 fun q r s ->
-  prog id_set3 [poso; bin_pluso; bin_multo]
-    (invoke "bin_multo" ((^~) q ((^.) r s))), 10 answers {
-q=[]; r=_.11; s=[]; 
-q=[_.14; _.13]; r=[1]; s=[_.14; _.13]; 
-q=[_.14; _.13]; r=[]; s=[]; 
-q=[_.20; _.19]; r=[0; 1]; s=[0; _.20; _.19]; 
-q=[_.26; _.25]; r=[0; 0; 1]; s=[0; 0; _.26; _.25]; 
-q=[1]; r=[1; 1]; s=[1; 1]; 
-q=[_.32; _.31]; r=[0; 0; 0; 1]; s=[0; 0; 0; _.32; _.31]; 
-q=[0; 1]; r=[1; 1]; s=[0; 1; 1]; 
-q=[1]; r=[0; 1; 1]; s=[0; 1; 1]; 
-q=[1]; r=[1; 0; 1]; s=[1; 0; 1]; 
+  prog id_set3 bin_divo_list
+    (invoke "bin_divo" ((^~) (to_bin 16) ((^~) q ((^.) r s)))), all answers {
+q=[1]; r=[0; 0; 0; 0; 1]; s=[]; 
+q=[0; 1]; r=[0; 0; 0; 1]; s=[]; 
+q=[0; 0; 1]; r=[0; 0; 1]; s=[]; 
+q=[0; 0; 0; 1]; r=[0; 1]; s=[]; 
+q=[0; 0; 0; 0; 1]; r=[1]; s=[]; 
+q=[0; 0; 1; 1]; r=[1]; s=[0; 0; 1]; 
+q=[0; 1; 1]; r=[0; 1]; s=[0; 0; 1]; 
+q=[0; 1; 1; 1]; r=[1]; s=[0; 1]; 
+q=[1; 1; 1]; r=[0; 1]; s=[0; 1]; 
+q=[0; 1; 0; 1]; r=[1]; s=[0; 1; 1]; 
+q=[1; 1; 1; 1]; r=[1]; s=[1]; 
+q=[1; 0; 1]; r=[1; 1]; s=[1]; 
+q=[1; 1]; r=[1; 0; 1]; s=[1]; 
+q=[1; 0; 1; 1]; r=[1]; s=[1; 1]; 
+q=[1; 0; 0; 1]; r=[1]; s=[1; 1; 1]; 
+q=[1; 1; 0; 1]; r=[1]; s=[1; 0; 1]; 
+}
+fun q r ->
+  prog id_set3 bin_divo_list
+    (invoke "bin_divo" ((^~) q ((^~) (to_bin 8) ((^.) (to_bin 4) r)))), all answers {
+q=[0; 0; 0; 0; 0; 1]; r=[]; 
+q=[0; 0; 1; 0; 0; 1]; r=[0; 0; 1]; 
+q=[0; 1; 1; 0; 0; 1]; r=[0; 1; 1]; 
+q=[0; 1; 0; 0; 0; 1]; r=[0; 1]; 
+q=[1; 1; 1; 0; 0; 1]; r=[1; 1; 1]; 
+q=[1; 0; 0; 0; 0; 1]; r=[1]; 
+q=[1; 0; 1; 0; 0; 1]; r=[1; 0; 1]; 
+q=[1; 1; 0; 0; 0; 1]; r=[1; 1]; 
 }
