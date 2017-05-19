@@ -80,12 +80,26 @@ module Stream =
     | Cons (x, xs) -> f x; iter f xs
     | Lazy s -> iter f @@ Lazy.force s
 
+    let rec filter : 'b list -> ('a * 'b) t -> 'a t = fun table -> function
+    | Nil -> Nil
+    | Cons ((x, h), xs) -> if List.mem h table then filter table xs else Cons (x, filter (h::table) xs)
+    | Lazy z -> Lazy (Lazy.lazy_from_fun (fun () -> filter table @@ Lazy.force z))
+
   end
 
 module SupportStream =
   struct
 
-    type 'a t = Nil | Diverge of bool | Cons of 'a * 'a t | Lazy of 'a t Lazy.t
+    type history = Leaf | Left of history | Right of history | Node of history list
+
+    (* let rec print_his = function
+    | Leaf -> Printf.printf ""
+    | Left h -> Printf.printf "L"; print_his h
+    | Right h -> Printf.printf "R"; print_his h
+    | Node [] -> Printf.printf "[]" 
+    | Node (h::hs) -> Printf.printf "["; print_his h; List.map (fun h -> Printf.printf "|"; print_his h) hs; Printf.printf "]" *)
+
+    type 'a t = Nil | Diverge of bool | Cons of ('a * history) * 'a t | Lazy of 'a t Lazy.t
 
     let from_fun (f: unit -> 'a t) : 'a t = Lazy (Lazy.lazy_from_fun f)
 
@@ -93,42 +107,79 @@ module SupportStream =
 
     let divergence = Diverge false
 
-    let cons h t = Cons (h, t)
+    let cons h t = Cons ((h, Leaf), t)
+
+    let rec his_map hf ss =
+      from_fun (fun () ->
+        match ss with
+        | Nil                -> Nil
+        | Diverge b          -> Diverge b
+        | Cons ((x, h), xss) -> Cons ((x, hf h), his_map hf xss)
+        | Lazy z             -> his_map hf (Lazy.force z)
+      )
+
+    let start_node ss = his_map (fun h -> Node [h]) ss
 
     let rec mplus fss gss =
       from_fun (fun () ->
         match fss with
-        | Nil           -> gss
-        | Diverge b     -> Diverge b
-        | Cons (x, xss) -> cons x (mplus xss gss)
-        | Lazy z        -> mplus gss (Lazy.force z) 
+        | Nil -> gss
+        | Diverge b -> Diverge b
+        | Cons (p, xss) -> Cons (p, mplus xss gss)
+        | Lazy z -> mplus gss (Lazy.force z)
       )
+
+    let mplus_s fss gss =
+      let rec mplus_s side fss gss =
+        from_fun (fun () ->
+          match fss with
+          | Nil                -> his_map (if side then (fun h -> Left h) else (fun h -> Right h)) gss
+          | Diverge b          -> Diverge b
+          | Cons ((x, h), xss) -> Cons ((x, if side then Right h else Left h), (mplus_s side xss gss))
+          | Lazy z             -> mplus_s (not side) gss (Lazy.force z) 
+        )
+      in mplus_s false fss gss
 
     let rec bind ss f =
       from_fun (fun () ->
         match ss with
-        | Nil           -> nil
-        | Diverge _     -> Diverge true
-        | Cons (x, xss) -> mplus (f x) (bind xss f)
-        | Lazy z        -> bind (Lazy.force z) f
+        | Nil                -> Nil
+        | Diverge _          -> Diverge true
+        | Cons ((x, h), xss) -> mplus (his_map (fun (Node hs) -> Node (h::hs)) (f x)) (bind xss f)
+        | Lazy z             -> bind (Lazy.force z) f
       )
 
     let rec catch ss hs =
       from_fun (fun () ->
         match ss with
-        | Nil           -> nil
+        | Nil           -> Nil
         | Diverge false -> Diverge false
         | Diverge true  -> hs
-        | Cons (x, xss) -> Cons (x, catch xss hs)
+        | Cons (p, xss) -> Cons (p, catch xss hs)
         | Lazy z        -> catch (Lazy.force z) hs
       )
 
-    let rec to_stream ss hs =
+    let shift i = 
+      let rec insert : 'a -> int -> 'a list -> 'a list = fun e i xs ->
+        match i, xs with
+        | 0, _      -> e :: xs
+        | _, []     -> [e]
+        | _, hd::tl -> hd :: insert e (i - 1) tl
+      in function
+      | Node (h :: hs) -> Node (insert h i hs)
+      | Leaf -> Leaf
+      | Left h -> Left h
+      | Right h -> Right h
+      | Node [] -> Node []
+
+    let shift_first i ss = his_map (shift i) ss
+
+    let rec to_h_stream ss hs =
       match ss with
       | Nil           -> Stream.nil
       | Diverge _     -> hs
-      | Cons (x, xss) -> Stream.cons x (to_stream xss hs)
-      | Lazy z        -> Stream.from_fun (fun () -> to_stream (Lazy.force z) hs)
+      | Cons (p, xss) -> Stream.cons p (to_h_stream xss hs)
+      | Lazy z        -> Stream.from_fun (fun () -> to_h_stream (Lazy.force z) hs)
 
   end
 
@@ -1359,15 +1410,15 @@ module Interpretation :
         | Disequality (x, y)           -> run_disequality_sup (logic_of_term @@ IdentSet.refine env iset x) 
                                                               (logic_of_term @@ IdentSet.refine env iset y)
                                                               st
-        | Marked       g               -> run mode defs cop log iset g st
+        (* | Marked       g               -> run mode defs cop log iset g st *)
         | Fresh       (x, g)           -> let var, env' = Env.fresh env in
                                           let new_iset = IdentSet.bind_ident x (term_of_logic var) iset in
                                           run mode defs (upd_cop (fun c -> Fresh (x, c)) cop) log new_iset g (env', subst, constr)
         | Disjunction [g]              -> run mode defs (upd_cop (fun c -> DisjunctionS c) cop) log iset g st
         | Disjunction (g :: gs)        -> let lss = run mode defs (upd_cop (fun c -> DisjunctionL (c, gs)) cop) log iset g st in
                                           let rss = run mode defs (upd_cop (fun c -> DisjunctionR (g, c)) cop) log iset (Disjunction gs) st in
-                                          SupportStream.mplus lss rss
-        | Conjunction [(g, _)]         -> run mode defs (upd_cop (fun c -> ConjunctionS c) cop) log iset g st
+                                          SupportStream.mplus_s lss rss
+        | Conjunction [(g, _)]         -> SupportStream.start_node (run mode defs (upd_cop (fun c -> ConjunctionS c) cop) log iset g st)
         | Conjunction ((g, i) :: cs)   -> let lss = run mode defs (upd_cop (fun c -> ConjunctionL ((c, i), cs)) cop) log iset g st in
                                           let rssf = run mode defs (upd_cop (fun c -> ConjunctionR ((g, i), c)) cop) log iset (Conjunction cs) in
                                           let handler = SupportStream.from_fun (fun () -> 
@@ -1383,8 +1434,8 @@ module Interpretation :
                                               in
                                               run mode new_defs cop log iset new_goal st
                                           ) in
-                                          SupportStream.catch (SupportStream.bind lss rssf) handler
-        | Invoke (name, arg_vals)      -> SupportStream.from_fun (fun () ->
+                                          SupportStream.catch (SupportStream.shift_first i (SupportStream.bind lss rssf)) handler
+        | Invoke (name, arg_vals)      -> SupportStream.from_fun (fun () -> (** )Printf.printf "%s\n" name;( **)
                                             let arg_vals_refined = List.map (fun av -> term_of_logic (refine st (logic_of_term (IdentSet.refine env iset av)))) arg_vals
                                             in
                                             let new_log =
@@ -1393,7 +1444,7 @@ module Interpretation :
                                                 try
                                                   let old_vals = Log.find name log in
                                                   if is_reducible env (!!! arg_vals_refined) (!!! old_vals)
-                                                    then ((*Printf.printf "Divergence\n";*) None)
+                                                    then ((**)Printf.printf "Divergence in %s\n" name;(**) None)
                                                     else Some (Log.add name (!!! arg_vals_refined) log)
                                                 with Not_found -> Some (Log.add name (!!! arg_vals_refined) log)
                                               else Some log
@@ -1412,9 +1463,10 @@ module Interpretation :
     let final_run (iset, defs, goal) st =
       let defs, goal = List.map (fun (name, (args, body)) -> (name, (args, pre_opt body))) defs, pre_opt goal in
       let defs = List.fold_left (fun acc (k, x) -> Defs.add k x acc) Defs.empty defs in
-      SupportStream.to_stream
-        (run true defs None Log.empty iset goal st)
-        (SupportStream.to_stream (run false defs None Log.empty iset goal st) Stream.nil)
+      Stream.filter (* (fun h -> SupportStream.print_his h; Printf.printf "\n\n\n%!") *) []
+        (SupportStream.to_h_stream
+          (run true defs None Log.empty iset goal st)
+          (SupportStream.to_h_stream (run false defs None Log.empty iset goal st) Stream.nil))
   end
 
 
