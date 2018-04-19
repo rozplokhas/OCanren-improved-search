@@ -2,445 +2,713 @@ open GT
 open MiniKanren
 open Tester
 
+@type tree = Leaf | Node of tree logic * tree logic with show
 
 
-(*** Just goals ***)
-
-let id_set0 = IdentSet.empty ()
-
-let a   : int logic = IdentSet.new_ident id_set0 0
-let b   : int logic = IdentSet.new_ident id_set0 1
-let c   : int logic = IdentSet.new_ident id_set0 2
+let (!!!) = Obj.magic;;
 
 
-let just_a = def "just_a" (!^ a)
-  (a === !5)
+(* Relations on lists *)
 
-let a_and_b = def "a_and_b" (!^ a) (
-  fresh (!^ b) [
-    (a === !7);
-    (disj (b === !6) (b === !5))
-  ]
-)
-
-let a_and_b' = def "a_and_b'" (!^ b) (
-  fresh (!^ a) [
-    (a === !7);
-    (disj (b === !6) (b === !5))
-  ]
-)
-
-let fives = def "fives" (!^ a) (
-  disj (a === !5) (invoke "fives" (!^ a)) 
-)
-
-
-(*** Lists ***)
-
-let id_set1 = IdentSet.empty ()
-
-let a   : int logic List.logic = IdentSet.new_ident id_set1 0
-let b   : int logic List.logic = IdentSet.new_ident id_set1 1
-let ab  : int logic List.logic = IdentSet.new_ident id_set1 2
-let h   : int logic            = IdentSet.new_ident id_set1 3
-let t   : int logic List.logic = IdentSet.new_ident id_set1 4
-let a'  : int logic List.logic = IdentSet.new_ident id_set1 5
-let ab' : int logic List.logic = IdentSet.new_ident id_set1 6
-let hs  : int logic List.logic = IdentSet.new_ident id_set1 7
-
-
-let appendo = def "appendo" (a ^~ b ^. ab) (
+let rec appendo_dir a b ab =
   conde [
     (a === !Nil) &&& (b === ab);
-    fresh (h ^. t) [
-      (a === h % t);
-      fresh (!^ ab') [(h % ab' === ab) &&& (invoke "appendo" (t ^~ b ^. ab'))]
-    ]
+    fresh (h t ab') (?& [
+      (a === h % t); 
+      (appendo_dir t b ab');
+      (h % ab' === ab);
+    ])  
   ]
-)
 
-let reverso = def "reverso" (a ^. b) (
-  disj
-    (conj (a === !Nil) (b === !Nil))
-    (fresh (h ^. t) [
-        conj (a === h % t)
-             (fresh (hs ^. a') [
-                   (hs === (!< h));
-                   (invoke "reverso" (t ^. a'));
-                   (invoke "appendo" (a' ^~ hs ^. b))
-              ])
+let rec appendo_dir_wrapped a b ab = relation "appendo_dir" [!!! a; !!! b; !!! ab] @@
+  conde [
+    (a === !Nil) &&& (b === ab);
+    fresh (h t ab') (?& [
+      (a === h % t); 
+      (appendo_dir_wrapped t b ab');
+      (h % ab' === ab);
     ])
-)
-
-
-(*** Sorting ***)
-
-let id_set2 = IdentSet.empty ()
-
-let x   : Nat.logic            = IdentSet.new_ident id_set2 0
-let y   : Nat.logic            = IdentSet.new_ident id_set2 1
-let x'  : Nat.logic            = IdentSet.new_ident id_set2 2
-let y'  : Nat.logic            = IdentSet.new_ident id_set2 3
-let min : Nat.logic            = IdentSet.new_ident id_set2 4
-let max : Nat.logic            = IdentSet.new_ident id_set2 5
-let l   : Nat.logic List.logic = IdentSet.new_ident id_set2 6
-let s   : Nat.logic            = IdentSet.new_ident id_set2 7
-let l'  : Nat.logic List.logic = IdentSet.new_ident id_set2 8
-let h   : Nat.logic            = IdentSet.new_ident id_set2 9
-let t   : Nat.logic List.logic = IdentSet.new_ident id_set2 10
-let s'  : Nat.logic            = IdentSet.new_ident id_set2 11
-let t'  : Nat.logic List.logic = IdentSet.new_ident id_set2 12
-let xs  : Nat.logic List.logic = IdentSet.new_ident id_set2 13
-let ys  : Nat.logic List.logic = IdentSet.new_ident id_set2 14
-let ss  : Nat.logic List.logic = IdentSet.new_ident id_set2 15
-let xs' : Nat.logic List.logic = IdentSet.new_ident id_set2 16
-let ys' : Nat.logic List.logic = IdentSet.new_ident id_set2 17
-let m   : Nat.logic            = IdentSet.new_ident id_set2 18
-let zs  : Nat.logic List.logic = IdentSet.new_ident id_set2 19
-let z   : Nat.logic            = IdentSet.new_ident id_set2 20
-let z'  : Nat.logic            = IdentSet.new_ident id_set2 21
-
-let lto = def "lto" (x ^. y) (
-  conde [
-    fresh (!^ y') [(x === !O) &&& (y === !(S y'))];
-    fresh (x' ^. y') [
-      (x === !(S x'));
-      (y === !(S y'));
-      (invoke "lto" (x' ^. y'))
-    ]
   ]
-)
 
-let geo = def "geo" (x ^. y) (
-  (x === y) ||| (invoke "lto" (y ^. x))
-)
-
-let minimumo = def "minimumo" (xs ^. m) (
+let rec appendo_rev a b ab =
   conde [
-    (xs === !< m);
-    fresh (x ^~ t ^. y) [
-      (xs === x % t);
-      (invoke "minimumo" (t ^. y));
-      (conde [
-        (invoke "lto" (x ^. y)) &&& (x === m);
-        (invoke "geo" (x ^. y)) &&& (y === m) 
-      ])
-    ]
+    (a === !Nil) &&& (b === ab);
+    fresh (h t ab') (?& [
+      (a === h % t); 
+      (h % ab' === ab);
+      (appendo_rev t b ab');
+    ])  
   ]
-)
 
-let minmaxo = def "minmaxo" (x ^~ y ^~ min ^. max) (
+let rec appendo_rev_wrapped a b ab = relation "appendo_rev" [!!! a; !!! b; !!! ab] @@
   conde [
-    (x === min) &&& (y === max) &&& (invoke "lto" (x ^. y));
-    (y === min) &&& (x === max) &&& (invoke "geo" (x ^. y))
+    (a === !Nil) &&& (b === ab);
+    fresh (h t ab') (?& [
+      (a === h % t); 
+      (h % ab' === ab);
+      (appendo_rev_wrapped t b ab');
+    ])  
   ]
-)
+  
+let rec reverso_dir a b = 
+  conde [
+    (a === !Nil) &&& (b === !Nil);
+    fresh (h t a') (?& [
+      (a === h % t);
+      (reverso_dir t a');
+      (appendo_dir a' !<h b);
+    ])
+  ]
 
-let smallesto = def "smallesto" (l ^~ s ^. l') (
+let rec reverso_dir_wrapped a b = relation "reverso_dir" [!!! a; !!! b] @@
+  conde [
+    (a === !Nil) &&& (b === !Nil);
+    fresh (h t a') (?& [
+      (a === h % t);
+      (reverso_dir_wrapped t a');
+      (appendo_dir_wrapped a' !<h b);
+    ])
+  ]
+
+let rec reverso_rev a b = 
+  conde [
+    (a === !Nil) &&& (b === !Nil);
+    fresh (h t a') (?& [
+      (a === h % t);
+      (appendo_rev a' !<h b);
+      (reverso_rev t a');
+    ])
+  ]
+
+let rec reverso_rev_wrapped a b = relation "reverso_rev" [!!! a; !!! b] @@
+  conde [
+    (a === !Nil) &&& (b === !Nil);
+    fresh (h t a') (?& [
+      (a === h % t);
+      (appendo_rev_wrapped a' !<h b);
+      (reverso_rev_wrapped t a');
+    ])
+  ]
+
+
+(* Sorting *)
+
+let rec leo_wrapped a b = relation "leo" [!!! a; !!! b] @@
+  conde [
+    (a === !O);
+    fresh (a' b') ( ?&[
+      (a === !(S a'));
+      (b === !(S b'));
+      (leo_wrapped a' b')
+    ])
+  ]
+
+let rec lto_wrapped a b = relation "lto" [!!! a; !!! b] @@
+  conde [
+    fresh (b') (?& [
+      (a === !O);
+      (b === !(S b'))
+    ]);
+    fresh (a' b') (?& [
+      (a === !(S a'));
+      (b === !(S b'));
+      (leo_wrapped a' b')
+    ])
+  ]
+
+
+let minmaxo a b min max = Nat.(
+    conde
+      [ (min === a) &&& (max === b) &&& (a <= b)
+      ; (max === a) &&& (min === b) &&& (a >  b)
+      ]
+  )
+
+let minmaxo_wrapped a b min max = relation "minmaxo" [!!! a; !!! b; !!! min; !!! max] @@ Nat.(
+    conde
+      [ (min === a) &&& (max === b) &&& (leo_wrapped a b)
+      ; (max === a) &&& (min === b) &&& (lto_wrapped b a)
+      ]
+  )
+
+let rec smallesto_dir l s l' =
   conde [       
     (l === !< s) &&& (l' === !Nil);
-    fresh (h ^~ t ^~ s' ^~ t' ^. max) [
+    fresh (h t s' t' max) ( ?&[
       (l === h % t);
-      (invoke "smallesto" (t ^~ s' ^. t'));
-      (invoke "minmaxo" (h ^~ s' ^~ s ^. max));
-      (l' === max % t')
-    ]
+      (smallesto_dir t s' t');
+      (minmaxo h s' s max);
+      (l' === max % t');
+    ])
   ]
-)
 
-let sorto = def "sorto" (xs ^. ys) (
+let rec smallesto_dir_wrapped l s l' = relation "smallesto_dir" [!!! l; !!! s; !!! l'] @@
+  conde [       
+    (l === !< s) &&& (l' === !Nil);
+    fresh (h t s' t' max) ( ?&[
+      (l === h % t);
+      (smallesto_dir_wrapped t s' t');
+      (minmaxo_wrapped h s' s max);
+      (l' === max % t');
+    ])
+  ]
+
+let rec smallesto_rev l s l' =
+  conde [       
+    (l === !< s) &&& (l' === !Nil);
+    fresh (h t s' t' max) ( ?&[
+      (l' === max % t');
+      (minmaxo h s' s max);
+      (smallesto_rev t s' t');
+      (l === h % t);
+    ])
+  ]
+
+let rec smallesto_rev_wrapped l s l' = relation "smallesto_rev" [!!! l; !!! s; !!! l'] @@
+  conde [       
+    (l === !< s) &&& (l' === !Nil);
+    fresh (h t s' t' max) ( ?&[
+      (l' === max % t');
+      (minmaxo_wrapped h s' s max);
+      (smallesto_rev_wrapped t s' t');
+      (l === h % t);
+    ])
+  ]
+
+let rec sorto_dir xs ys =
   conde [
     (xs === !Nil) &&& (ys === !Nil);
-    fresh (s ^~ xs' ^. ys') [
-      (invoke "smallesto" (xs ^~ s ^. xs'));
-      (invoke "sorto" (xs' ^. ys'));
-      (ys === s % ys')
-    ]
+    fresh (s xs' ys') (?& [
+      (smallesto_dir xs s xs');
+      (sorto_dir xs' ys');
+      (ys === s % ys');
+    ])
   ]
-)
 
-let permo = def "permo" (xs ^. ys) (
-  fresh (!^ ss) [
-    (invoke "sorto" (xs ^. ss)) &&& (invoke "sorto" (ys ^. ss))
-  ]
-)
-
-
-(*** Peano arithmetic ***)
-
-let pluso = def "pluso" (x ^~ y ^. z) (
-  conde [
-    (x === !O) &&& (y === z);
-    fresh (x' ^. z') [
-      (x === !(S x'));
-      (z === !(S z'));
-      (invoke "pluso" (x' ^~ y ^. z'))
-    ]
-  ]
-)
-
-let mulo = def "mulo" (x ^~ y ^. z) (
-  conde [
-    (x === !O) &&& (z === !O);
-    fresh (!^ x') [(x === !(S x')) &&& (y === !O) &&& (z === !O)];
-    fresh (x' ^~ z' ^. y') [
-      (x === !(S x'));
-      (y === !(S y'));
-      (invoke "mulo"  (x' ^~ y ^. z'));
-      (invoke "pluso" (z' ^~ y ^. z))
-    ]
-  ]
-)
-
-let map_succ = def "map_succ" (xs ^. ys) (
+let rec sorto_dir_wrapped xs ys = relation "sorto_dir" [!!! xs; !!! ys] @@
   conde [
     (xs === !Nil) &&& (ys === !Nil);
-    fresh (x ^~ xs' ^~ y ^. ys') [
-      (xs === x % xs');
-      (y === !(S x));
-      (invoke "map_succ" (xs' ^. ys'));
-      (ys === y % ys')
-    ]
+    fresh (s xs' ys') (?& [
+      (smallesto_dir_wrapped xs s xs');
+      (sorto_dir_wrapped xs' ys');
+      (ys === s % ys');
+    ])
   ]
-)
 
-
-(*** Binary arithmetic ***)
-
-let id_set3 = IdentSet.empty ()
-
-let x   : int logic List.logic = IdentSet.new_ident id_set3 0
-let y   : int logic List.logic = IdentSet.new_ident id_set3 1
-let r   : int logic List.logic = IdentSet.new_ident id_set3 2
-let x'  : int logic List.logic = IdentSet.new_ident id_set3 3
-let y'  : int logic List.logic = IdentSet.new_ident id_set3 4
-let r'  : int logic List.logic = IdentSet.new_ident id_set3 5
-let h   : int logic            = IdentSet.new_ident id_set3 6
-let t   : int logic List.logic = IdentSet.new_ident id_set3 7
-let r'' : int logic List.logic = IdentSet.new_ident id_set3 8
-let d   : int logic List.logic = IdentSet.new_ident id_set3 9
-let q'  : int logic List.logic = IdentSet.new_ident id_set3 9
-let n   : int logic List.logic = IdentSet.new_ident id_set3 10
-let n'  : int logic List.logic = IdentSet.new_ident id_set3 11
-let h'  : int logic            = IdentSet.new_ident id_set3 12
-
-let rec to_bin = (function
-| 0 -> !Nil
-| n when n mod 2 = 0 -> !0 % to_bin (n / 2)
-| n                  -> !1 % to_bin (n / 2)
-)
-
-let poso = def "poso" (!^ x) (
-  fresh (h ^. t) [
-    (x === h % t)
+let rec sorto_rev xs ys =
+  conde [
+    (xs === !Nil) &&& (ys === !Nil);
+    fresh (s xs' ys') (?& [
+      (ys === s % ys');
+      (sorto_rev xs' ys');
+      (smallesto_rev xs s xs');
+    ])
   ]
-)
 
-let bin_pluso = def "bin_pluso" (x ^~ y ^. r) (
+let rec sorto_rev_wrapped xs ys = relation "sorto_rev" [!!! xs; !!! ys] @@
+  conde [
+    (xs === !Nil) &&& (ys === !Nil);
+    fresh (s xs' ys') (?& [
+      (ys === s % ys');
+      (sorto_rev_wrapped xs' ys');
+      (smallesto_rev_wrapped xs s xs');
+    ])
+  ]
+
+let permo_dir xs ys =
+  fresh (ss)
+    ((sorto_dir xs ss) &&& (sorto_rev ys ss))
+
+let permo_dir_wrapped xs ys = relation "permo_dir" [!!! xs; !!! ys] @@
+  fresh (ss)
+    ((sorto_dir_wrapped xs ss) &&& (sorto_rev_wrapped ys ss))
+
+let permo_rev xs ys =
+  fresh (ss)
+    ((sorto_dir ys ss) &&& (sorto_rev xs ss))
+
+let permo_rev_wrapped xs ys = relation "permo_rev" [!!! xs; !!! ys] @@
+  fresh (ss)
+    ((sorto_dir_wrapped ys ss) &&& (sorto_rev_wrapped xs ss))
+
+
+(* Binary  arithmetic *)
+
+let bin_poso x =
+  fresh (h t) (x === h % t)
+
+let rec bin_pluso_dir x y r =
   conde [
     (y === !Nil) &&& (x === r);
-    (x === !Nil) &&& (invoke "poso" (!^ y)) &&& (y === r);
-    (fresh (x' ^~ y' ^. r') [
+    (x === !Nil) &&& (bin_poso y) &&& (y === r);
+    fresh (x' y' r') (?& [
       (x === !0 % x');
       (y === !0 % y');
       (r === !0 % r');
-      (invoke "poso" (!^ x'));
-      (invoke "poso" (!^ y'));
-      (invoke "bin_pluso" (x' ^~ y' ^. r'))
+      (bin_poso x');
+      (bin_poso y');
+      (bin_pluso_dir x' y' r');
     ]);
-    (fresh (x' ^~ y' ^. r') [
+    fresh (x' y' r') (?& [
       (x === !0 % x');
       (y === !1 % y');
       (r === !1 % r');
-      (invoke "poso" (!^ x'));
-      (invoke "bin_pluso" (x' ^~ y' ^. r'))
+      (bin_poso x');
+      (bin_pluso_dir x' y' r');
     ]);
-    (fresh (x' ^~ y' ^. r') [
+    fresh (x' y' r') (?& [
       (x === !1 % x');
       (y === !0 % y');
       (r === !1 % r');
-      (invoke "poso" (!^ y'));
-      (invoke "bin_pluso" (x' ^~ y' ^. r'))
+      (bin_poso y');
+      (bin_pluso_dir x' y' r');
     ]);
-    (fresh (x' ^~ y' ^~ r' ^. r'') [
+    fresh (x' y' r' r'') (?& [
       (x === !1 % x');
       (y === !1 % y');
       (r === !0 % r');
-      (invoke "bin_pluso" (x' ^~ y' ^. r''));
-      (invoke "bin_pluso" (r'' ^~ (!< (!1)) ^. r'))
+      (bin_pluso_dir x' y' r'');
+      (bin_pluso_dir r'' (!< (!1)) r');
     ])
   ]
-)
 
-let bin_multo = def "bin_multo" (x ^~ y ^. r) (
+let rec bin_pluso_dir_wrapped x y r = relation "bin_pluso_dir" [!!! x; !!! y; !!! r] @@
+  conde [
+    (y === !Nil) &&& (x === r);
+    (x === !Nil) &&& (bin_poso y) &&& (y === r);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !0 % y');
+      (r === !0 % r');
+      (bin_poso x');
+      (bin_poso y');
+      (bin_pluso_dir_wrapped x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !1 % y');
+      (r === !1 % r');
+      (bin_poso x');
+      (bin_pluso_dir_wrapped x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !1 % x');
+      (y === !0 % y');
+      (r === !1 % r');
+      (bin_poso y');
+      (bin_pluso_dir_wrapped x' y' r');
+    ]);
+    fresh (x' y' r' r'') (?& [
+      (x === !1 % x');
+      (y === !1 % y');
+      (r === !0 % r');
+      (bin_pluso_dir_wrapped x' y' r'');
+      (bin_pluso_dir_wrapped r'' (!< (!1)) r');
+    ])
+  ]
+
+let rec bin_pluso_rev x y r =
+  conde [
+    (y === !Nil) &&& (x === r);
+    (x === !Nil) &&& (bin_poso y) &&& (y === r);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !0 % y');
+      (r === !0 % r');
+      (bin_poso x');
+      (bin_poso y');
+      (bin_pluso_rev x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !1 % y');
+      (r === !1 % r');
+      (bin_poso x');
+      (bin_pluso_rev x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !1 % x');
+      (y === !0 % y');
+      (r === !1 % r');
+      (bin_poso y');
+      (bin_pluso_rev x' y' r');
+    ]);
+    fresh (x' y' r' r'') (?& [
+      (x === !1 % x');
+      (y === !1 % y');
+      (r === !0 % r');
+      (bin_pluso_rev r'' (!< (!1)) r');
+      (bin_pluso_rev x' y' r'');
+    ])
+  ]
+
+let rec bin_pluso_rev_wrapped x y r = relation "bin_pluso_rev" [!!! x; !!! y; !!! r] @@
+  conde [
+    (y === !Nil) &&& (x === r);
+    (x === !Nil) &&& (bin_poso y) &&& (y === r);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !0 % y');
+      (r === !0 % r');
+      (bin_poso x');
+      (bin_poso y');
+      (bin_pluso_rev_wrapped x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !0 % x');
+      (y === !1 % y');
+      (r === !1 % r');
+      (bin_poso x');
+      (bin_pluso_rev_wrapped x' y' r');
+    ]);
+    fresh (x' y' r') (?& [
+      (x === !1 % x');
+      (y === !0 % y');
+      (r === !1 % r');
+      (bin_poso y');
+      (bin_pluso_rev_wrapped x' y' r');
+    ]);
+    fresh (x' y' r' r'') (?& [
+      (x === !1 % x');
+      (y === !1 % y');
+      (r === !0 % r');
+      (bin_pluso_rev_wrapped r'' (!< (!1)) r');
+      (bin_pluso_rev_wrapped x' y' r'');
+    ])
+  ]
+
+let rec bin_multo_dir x y r =
   conde [
     (x === !Nil) &&& (r === !Nil);
-    (invoke "poso" (!^ x)) &&& (y === !Nil) &&& (r === !Nil);
-    (invoke "poso" (!^ x)) &&& (y === !< !1) &&& (r === x);
-    (fresh (y' ^. r') [
-      (invoke "poso" (!^ x));
+    (bin_poso x) &&& (y === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !< !1) &&& (r === x);
+    fresh (y' r') (?& [
+      (bin_poso x);
       (y === !0 % y');
-      (invoke "poso" (!^ y'));
-      (invoke "bin_multo" (x ^~ y' ^. r'));
-      (r === !0 % r')
+      (bin_poso y');
+      (bin_multo_dir x y' r');
+      (r === !0 % r');
     ]);
-    (fresh (y' ^~ r' ^. r'') [
-      (invoke "poso" (!^ x));
+    fresh (y' r' r'') (?& [
+      (bin_poso x);
       (y === !1 % y');
-      (invoke "poso" (!^ y'));
-      (invoke "bin_multo" (x ^~ y' ^. r'));
+      (bin_poso y');
+      (bin_multo_dir x y' r');
       (r'' === !0 % r');
-      (invoke "bin_pluso" (r'' ^~ x ^. r))
+      (bin_pluso_dir r'' x r);
     ])
-  ]  
-)
-
-let bin_lto = def "bin_lto" (x ^. y) (
-  fresh (!^ d) [
-    (invoke "poso" (!^ d));
-    (invoke "bin_pluso" (x ^~ d ^. y))
   ]
-)
 
-let bin_divo = def "bin_divo" (x ^~ y ^~ q' ^. r) (
-  fresh (!^ z) [
-    (invoke "poso" (!^ y));
-    (invoke "poso" (!^ z));
-    (invoke "bin_lto"   (r ^. y));
-    (invoke "bin_multo" (q' ^~ y ^. z));
-    (invoke "bin_pluso" (z ^~ r ^. x))
-  ]
-)
-
-let bin_gt1o = def "bin_gt1o" (!^ x) (
-  fresh (h ^~ h' ^. t) [
-    (x === h % (h' % t))
-  ]
-)
-
-let bin_powo = def "bin_powo" (x ^~ y ^. r) (
+let rec bin_multo_dir_wrapped x y r = relation "bin_multo_dir" [!!! x; !!! y; !!! r] @@
   conde [
-    (x === !Nil) &&& (invoke "poso" (!^ y)) &&& (r === !Nil);
-    (x === !< !1) &&& (invoke "poso" (!^ y)) &&& (r === !< !1);
-    (invoke "bin_gt1o" (!^ x)) &&& (y === !Nil) &&& (r === !< !1);
-    (invoke "bin_gt1o" (!^ x)) &&& (y === !< !1) &&& (r === x);
-    (*(invoke "poso" (!^ x)) &&& (y === !< !1) &&& (r === x); *)
-    (fresh (y' ^. r') [
-      (invoke "bin_gt1o" (!^ x));
-      (invoke "bin_gt1o" (!^ r));
+    (x === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !< !1) &&& (r === x);
+    fresh (y' r') (?& [
+      (bin_poso x);
       (y === !0 % y');
-      (invoke "poso" (!^ y'));
-      (invoke "bin_multo" (r' ^~ r' ^. r));
-      (invoke "bin_powo" (x ^~ y' ^. r'))
+      (bin_poso y');
+      (bin_multo_dir_wrapped x y' r');
+      (r === !0 % r');
     ]);
-    (* (fresh (y' ^~ r' ^. r'') [
-      (invoke "bin_gt1o" (!^ x));
-      (invoke "bin_lto" ((!< !1) ^. r));
+    fresh (y' r' r'') (?& [
+      (bin_poso x);
       (y === !1 % y');
-      (invoke "poso" (!^ x'));
-      (invoke "bin_multo" (r'' ^~ x ^. r));
-      (invoke "bin_multo" (r' ^~ r' ^. r''));
-      (invoke "bin_powo" (x ^~ y' ^. r')); 
-    ]) *)
-  ]  
-)
-
-(*let bin_powo = def "bin_powo" (x ^~ n ^. r) (
-  conde [
-    (n === !Nil) &&& (r === !< !1);
-    fresh (n' ^. r') [
-      (invoke "bin_pluso" (n' ^~ (!< !1) ^. n));
-      (invoke "bin_powo"  (x ^~ n' ^. r'));
-      (invoke "bin_multo" (r' ^~ x ^. r))
-    ]
+      (bin_poso y');
+      (bin_multo_dir_wrapped x y' r');
+      (r'' === !0 % r');
+      (bin_pluso_dir_wrapped r'' x r);
+    ])
   ]
-)*)
 
-let show_int           = show (logic) (show int)
-let show_int_list      = show (List.logic) show_int
-let show_nat           = show (Nat.logic)
-let show_nat_list      = show (List.logic) show_nat
-let show_nat_gr      n = show int @@ prj_nat n
-let show_nat_list_gr l = show list (show int) @@ prj_nat_list l
+let rec bin_multo_rev x y r =
+  conde [
+    (x === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !< !1) &&& (r === x);
+    fresh (y' r') (?& [
+      (bin_poso x);
+      (bin_poso y');
+      (r === !0 % r');
+      (bin_multo_rev x y' r');
+      (y === !0 % y');
+    ]);
+    fresh (y' r' r'') (?& [
+      (bin_poso x);
+      (bin_poso y');
+      (r'' === !0 % r');
+      (bin_pluso_rev r'' x r);
+      (bin_multo_rev x y' r');
+      (y === !1 % y');
+    ])
+  ]
 
-let reverso_list   = [appendo; reverso]
-let minimumo_list  = [geo; lto; minimumo]
-let sorto_list     = [lto; geo; minmaxo; smallesto; sorto]
-let permo_list     = [lto; geo; minmaxo; smallesto; sorto; permo]
-let bin_pluso_list = [poso; bin_pluso]
-let bin_multo_list = [poso; bin_pluso; bin_multo]
-let bin_lto_list   = [poso; bin_pluso; bin_lto]
-let bin_divo_list  = [poso; bin_pluso; bin_lto; bin_multo; bin_divo]
-let bin_powo_list  = [poso; bin_pluso; bin_gt1o; bin_multo; bin_powo]
+let rec bin_multo_rev_wrapped x y r = relation "bin_multo_rev" [!!! x; !!! y; !!! r] @@
+  conde [
+    (x === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !Nil) &&& (r === !Nil);
+    (bin_poso x) &&& (y === !< !1) &&& (r === x);
+    fresh (y' r') (?& [
+      (bin_poso x);
+      (bin_poso y');
+      (r === !0 % r');
+      (bin_multo_rev_wrapped x y' r');
+      (y === !0 % y');
+    ]);
+    fresh (y' r' r'') (?& [
+      (bin_poso x);
+      (bin_poso y');
+      (r'' === !0 % r');
+      (bin_pluso_rev_wrapped r'' x r);
+      (bin_multo_rev_wrapped x y' r');
+      (y === !1 % y');
+    ])
+  ]
 
-let rec nat_pref = function
+let bin_lto x y =
+  fresh (d) (?& [
+    (bin_poso d);
+    (bin_pluso_rev x d y)
+  ])
+
+let bin_lto_wrapped x y = relation "bin_lto" [!!! x; !!! y] @@
+  fresh (d) (?& [
+    (bin_poso d);
+    (bin_pluso_rev_wrapped x d y)
+  ])
+
+let bin_divo_dir x y q' r =
+  fresh (z) (?& [
+    (bin_lto r y);
+    (bin_multo_dir q' y z);
+    (bin_pluso_dir z r x);
+  ])
+
+let bin_divo_dir_wrapped x y q' r = relation "bin_divo_dir" [!!! x; !!! y] @@
+  fresh (z) (?& [
+    (bin_lto_wrapped r y);
+    (bin_multo_dir_wrapped q' y z);
+    (bin_pluso_dir_wrapped z r x);
+  ])
+
+let bin_divo_rev x y q' r =
+  fresh (z) (?& [
+    (bin_pluso_rev z r x);
+    (bin_multo_rev q' y z);
+    (bin_lto r y);
+  ])
+
+
+(*** Binary trees ***)
+
+let rec leaveso_dir t n =
+  conde [
+    (t === !Leaf) &&& (n === !< (!1));
+    fresh (lt ln rt rn) (?& [
+      (bin_poso ln);
+      (bin_poso rn);
+      (t === !(Node (lt, rt)));
+      (leaveso_dir lt ln);
+      (leaveso_dir rt rn);
+      (bin_pluso_dir ln rn n);
+    ])
+  ]
+
+let rec leaveso_dir_wrapped t n = relation "leaveso_dir" [!!! t; !!! n] @@
+  conde [
+    (t === !Leaf) &&& (n === !< (!1));
+    fresh (lt ln rt rn) (?& [
+      (bin_poso ln);
+      (bin_poso rn);
+      (t === !(Node (lt, rt)));
+      (leaveso_dir_wrapped lt ln);
+      (leaveso_dir_wrapped rt rn);
+      (bin_pluso_dir_wrapped ln rn n);
+    ])
+  ]
+
+let rec leaveso_rev t n =
+  conde [
+    (t === !Leaf) &&& (n === !< (!1));
+    fresh (lt ln rt rn) (?& [
+      (bin_poso ln);
+      (bin_poso rn);
+      (bin_pluso_rev ln rn n);
+      (leaveso_rev lt ln);
+      (leaveso_rev rt rn);
+      (t === !(Node (lt, rt)));
+    ])
+  ]
+
+
+let rec rnats = function
 | 0 -> []
-| n -> n :: nat_pref (n - 1)
+| n -> n :: rnats (n - 1)
 
-let _ =
-(** )
+let nats n = List.rev (rnats n)
 
-  run show_int         (-1) q   (REPR (fun q     -> prog id_set0 [just_a  ]     (invoke "just_a"    (!^ q))                                               )) qh;
-  run show_int         (-1) q   (REPR (fun q     -> prog id_set0 [a_and_b ]     (invoke "a_and_b"   (!^ q))                                               )) qh;
-  run show_int         (-1) q   (REPR (fun q     -> prog id_set0 [a_and_b']     (invoke "a_and_b'"  (!^ q))                                               )) qh;
-  run show_int         (10) q   (REPR (fun q     -> prog id_set0 [fives]        (invoke "fives"     (!^ q))                                               )) qh;
+let show_int      = show(logic) (show int)
+let show_int_list = show(List.logic) show_int
+let show_nat_list = show(List.logic) (show Nat.logic)
+let show_tree     = show(logic) (show tree)
 
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set0 [appendo ]     (invoke "appendo"   (inj_list [1; 2] ^~ inj_list [3; 4]  ^. q))           )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set0 [appendo ]     (invoke "appendo"   (q ^~ inj_list [3; 4]  ^. inj_list [1; 2; 3; 4]))     )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set0 [appendo ]     (invoke "appendo"   (inj_list [1; 2] ^~ q  ^. inj_list [1; 2; 3; 4]))     )) qh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set0 [appendo ]     (invoke "appendo"   (q ^~ r  ^. inj_list [1; 2; 3; 4]))                   )) qrh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set1 reverso_list   (invoke "reverso"   (q ^. inj_list (nat_pref 70)))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set1 reverso_list   (invoke "reverso"   (inj_list [1; 2; 3; 4; 5] ^. q))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set1 reverso_list   (invoke "reverso"   (inj_list [1; 2; 3] ^. inj_list [3; 2; 1]))           )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set1 reverso_list   (invoke "reverso"   (inj_list [1; 2; 1] ^. inj_list [3; 2; 1]))           )) qh;
+let _ = ();
+  (*** appendo <= ***)
 
-  run show_nat_gr      (-1) q   (REPR (fun q     -> prog id_set2 minimumo_list  (invoke "minimumo"  (inj_nat_list [6; 5; 4; 1; 2] ^. q))                  )) qh;
-  run show_nat_gr      (-1) q   (REPR (fun q     -> prog id_set2 minimumo_list  (invoke "minimumo"  (inj_nat_list [] ^. q))                               )) qh;
-( **)
-(** )
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 sorto_list     (invoke "sorto"     (inj_nat_list [8; 9; 10; 7; 6; 5; 4; 1; 2; 3] ^. q))  )) qh;
-( **)
-(**)
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 sorto_list     (invoke "sorto"     (q ^. inj_nat_list [1; 2; 3; 4; 5]))               )) qh;
-(**)
-(** )
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 permo_list     (invoke "permo"     (inj_nat_list [4; 3; 5; 5; 1] ^. q))                  )) qh;
+  (** ) run show_int_list 101 qr (REPR (fun q r -> appendo_rev q r (inj_list (nats 100)))) qrh; ( **)
+  (** ) run show_int_list 201 qr (REPR (fun q r -> appendo_rev q r (inj_list (nats 200)))) qrh; ( **)
+  (** ) run show_int_list 301 qr (REPR (fun q r -> appendo_rev q r (inj_list (nats 300)))) qrh; ( **)
 
-  run show_nat_gr      (-1) q   (REPR (fun q     -> prog id_set2 [pluso]        (invoke "pluso"     (inj_nat 6 ^~ inj_nat 4 ^. q))                        )) qh;
-  run show_nat_gr      (-1) qr  (REPR (fun q r   -> prog id_set2 [pluso]        (invoke "pluso"     (q ^~ r ^. inj_nat 10))                               )) qrh;
-  run show_nat         (10) qrs (REPR (fun q r s -> prog id_set2 [pluso]        (invoke "pluso"     (q ^~ r ^. s))                                        )) qrsh;
-  run show_nat_gr      (-1) q   (REPR (fun q     -> prog id_set2 [pluso; mulo]  (invoke "mulo"      (inj_nat 3 ^~ inj_nat 5 ^. q))                        )) qh;
-  run show_nat_gr      (-1) qr  (REPR (fun q r   -> prog id_set2 [pluso; mulo]  (invoke "mulo"      (q ^~ r ^. inj_nat 36))                               )) qrh;
+  (** ) run show_int_list 101 qr (REPR (fun q r -> appendo_dir q r (inj_list (nats 100)))) qrh; ( **)
+  (** ) run show_int_list 201 qr (REPR (fun q r -> appendo_dir q r (inj_list (nats 200)))) qrh; ( **)
+  (** ) run show_int_list 301 qr (REPR (fun q r -> appendo_dir q r (inj_list (nats 300)))) qrh; ( **)
 
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]     (invoke "map_succ"  (inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10] ^. q))  )) qh;
-  run show_nat_list_gr (-1) q   (REPR (fun q     -> prog id_set2 [map_succ]     (invoke "map_succ"  (q ^. inj_nat_list [1; 2; 3; 4; 5; 6; 7; 8; 9; 10]))  )) qh;
+  (** ) run show_int_list 101 qr (REPR (fun q r -> appendo_dir_wrapped q r (inj_list (nats 100)))) qrh; ( **)
+  (** ) run show_int_list 201 qr (REPR (fun q r -> appendo_dir_wrapped q r (inj_list (nats 200)))) qrh; ( **)
+  (** ) run show_int_list 301 qr (REPR (fun q r -> appendo_dir_wrapped q r (inj_list (nats 300)))) qrh; ( **)
 
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 3) ^~ (to_bin 6) ^. q))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 2) ^~ q ^. (to_bin 5)))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" ((to_bin 8) ^~ q ^. (to_bin 6)))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_pluso_list (invoke "bin_pluso" (q ^~ (to_bin 5) ^. (to_bin 8)))                      )) qh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_pluso_list (invoke "bin_pluso" (q ^~ r  ^. (to_bin 5)))                              )) qrh;
+
+  (*** reverso => ***)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir (inj_list (nats 30)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir (inj_list (nats 60)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir (inj_list (nats 90)) q)) qh; ( **)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev (inj_list (nats 30)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev (inj_list (nats 60)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev (inj_list (nats 90)) q)) qh; ( **)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev_wrapped (inj_list (nats 30)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev_wrapped (inj_list (nats 60)) q)) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev_wrapped (inj_list (nats 90)) q)) qh; ( **)
+
+
+  (*** reverso <= ***)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev q (inj_list (nats 30)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev q (inj_list (nats 60)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_rev q (inj_list (nats 90)))) qh; ( **)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir q (inj_list (nats 30)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir q (inj_list (nats 60)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir q (inj_list (nats 90)))) qh; ( **)
+
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir_wrapped q (inj_list (nats 30)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir_wrapped q (inj_list (nats 60)))) qh; ( **)
+  (** ) run show_int_list 1 q (REPR (fun q -> reverso_dir_wrapped q (inj_list (nats 90)))) qh; ( **)
+
+
+  (*** sorto => ***)
+
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 3)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 4)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 10)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 20)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_dir (inj_nat_list (rnats 30)) q)) qh; ( **)
+
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev (inj_nat_list (rnats 3)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev (inj_nat_list (rnats 4)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev (inj_nat_list (rnats 20)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev (inj_nat_list (rnats 40)) q)) qh; ( **)
+
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 3)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 4)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 10)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 20)) q)) qh; ( **)
+  (** ) run show_nat_list 1 q (REPR (fun q -> sorto_rev_wrapped (inj_nat_list (rnats 30)) q)) qh; ( **)
+
+
+  (*** sorto <= ***)
+
+  (** ) run show_nat_list 2 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 2)))) qh; ( **)
+  (** ) run show_nat_list 6 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 3)))) qh; ( **)
+  (** ) run show_nat_list 24 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 4)))) qh; ( **)
+  (** ) run show_nat_list 120 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 5)))) qh; ( **)
+  (** ) run show_nat_list 720 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 6)))) qh; ( **)
+  (** ) run show_nat_list 5040 q (REPR (fun q -> sorto_rev q (inj_nat_list (nats 7)))) qh; ( **)
+
+  (** ) run show_nat_list 2 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 2)))) qh; ( **)
+  (** ) run show_nat_list 6 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 3)))) qh; ( **)
+  (** ) run show_nat_list 24 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 4)))) qh; ( **)
+  (** ) run show_nat_list 120 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 5)))) qh; ( **)
+  (** ) run show_nat_list 720 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 6)))) qh; ( **)
+  (** ) run show_nat_list 5040 q (REPR (fun q -> sorto_dir q (inj_nat_list (nats 7)))) qh; ( **)
+
+  (** ) run show_nat_list 2 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 2)))) qh; ( **)
+  (** ) run show_nat_list 6 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 3)))) qh; ( **)
+  (** ) run show_nat_list 24 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 4)))) qh; ( **)
+  (** ) run show_nat_list 120 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 5)))) qh; ( **)
+  (** ) run show_nat_list 720 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 6)))) qh; ( **)
+  (** ) run show_nat_list 5040 q (REPR (fun q -> sorto_dir_wrapped q (inj_nat_list (nats 7)))) qh; ( **)
   
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" ((to_bin 5) ^~ (to_bin 3) ^. q))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ (to_bin 3) ^. (to_bin 12)))                     )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_multo_list (invoke "bin_multo" ((to_bin 3) ^~ q ^. (to_bin 12)))                     )) qh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_multo_list (invoke "bin_multo" (q ^~ r ^. (to_bin 24)))                              )) qrh;
 
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 5)  ^. (to_bin 10)))                         )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 6)  ^. (to_bin 6) ))                         )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 15) ^. (to_bin 4) ))                         )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   (q           ^. (to_bin 13)))                         )) qh;
-  run show_int_list    (10) q   (REPR (fun q     -> prog id_set3 bin_lto_list   (invoke "bin_lto"   ((to_bin 13) ^. q))                                   )) qh;
+  (*** permo ***)
 
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  ((to_bin 21) ^~ (to_bin 7) ^~ q ^. r))                )) qrh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  ((to_bin 23) ^~ (to_bin 5) ^~ q ^. r))                )) qrh;
-  run show_int_list    (-1) qrs (REPR (fun q r s -> prog id_set3 bin_divo_list  (invoke "bin_divo"  ((to_bin 16) ^~ q ^~ r ^. s))                         )) qrsh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_divo_list  (invoke "bin_divo"  (q ^~ (to_bin 8) ^~ (to_bin 4) ^. r))                 )) qrh;
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_dir (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_dir (inj_nat_list (rnats 3)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_dir (inj_nat_list (rnats 4)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_dir (inj_nat_list (rnats 5)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_dir (inj_nat_list (rnats 6)) q)) qh; ( **)
 
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  ((to_bin 3) ^~ (to_bin 4) ^. q))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  ((to_bin 10) ^~ (to_bin 4) ^. q))                     )) qh;
-  run show_int_list    (-1) qr  (REPR (fun q r   -> prog id_set3 bin_powo_list  (invoke "bin_powo"  (q ^~ r ^. (to_bin 1)))                               )) qrh;
+  (** ) run show_nat_list 2 q (REPR (fun q -> permo_rev (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list 6 q (REPR (fun q -> permo_rev (inj_nat_list (rnats 3)) q)) qh; ( **)
+  
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_rev_wrapped (inj_nat_list (rnats 2)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_rev_wrapped (inj_nat_list (rnats 3)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_rev_wrapped (inj_nat_list (rnats 4)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_rev_wrapped (inj_nat_list (rnats 5)) q)) qh; ( **)
+  (** ) run show_nat_list (-1) q (REPR (fun q -> permo_rev_wrapped (inj_nat_list (rnats 6)) q)) qh; ( **)
 
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  ((to_bin 3) ^~ (to_bin 4) ^. q))                      )) qh;
-  run show_int_list    (-1) q   (REPR (fun q     -> prog id_set3 bin_powo_list  (invoke "bin_powo"  (q          ^~ (to_bin 3) ^. (to_bin 125)))           )) qh;
-( **)
+  
+  (*** bin_multo <= ***)
+
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_rev q r (inj_list [1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_rev q r (inj_list [1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_rev q r (inj_list [1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_rev q r (inj_list [1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_rev q r (inj_list [1; 1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+
+  (** ) run show_int_list 2 qr (REPR (fun q r -> bin_multo_dir q r (inj_list [1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list 4 qr (REPR (fun q r -> bin_multo_dir q r (inj_list [1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list 2 qr (REPR (fun q r -> bin_multo_dir q r (inj_list [1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list 2 qr (REPR (fun q r -> bin_multo_dir q r (inj_list [1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list 2 qr (REPR (fun q r -> bin_multo_dir q r (inj_list [1; 1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_dir_wrapped q r (inj_list [1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_dir_wrapped q r (inj_list [1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_dir_wrapped q r (inj_list [1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_dir_wrapped q r (inj_list [1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+  (** ) run show_int_list (-1) qr (REPR (fun q r -> bin_multo_dir_wrapped q r (inj_list [1; 1; 1; 1; 1; 1; 1; 1]))) qrh; ( **)
+
+
+  (*** bin_divo ***)
+
+  (**) run show_int_list (-1) qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_rev (inj_list [0; 0; 1]) q r s)) qrsh; (**)
+  (** ) run show_int_list (-1) qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_rev (inj_list [0; 0; 0; 1]) q r s)) qrsh; ( **)
+  (** ) run show_int_list (-1) qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_rev (inj_list [0; 0; 0; 0; 1]) q r s)) qrsh; ( **)
+
+  (** ) run show_int_list 8 qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_dir (inj_list [0; 0; 1]) q r s)) qrsh; ( **)
+
+  (** ) run show_int_list (-1) qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_dir_wrapped (inj_list [0; 0; 0; 1]) q r s)) qrsh; ( **)
+  (** ) run show_int_list (-1) qrs (REPR (fun q r s -> bin_poso r &&& bin_divo_dir_wrapped (inj_list [0; 0; 0; 0; 1]) q r s)) qrsh; ( **)
+  
+
+
+  (*** leaveso ***)
+
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_rev q (inj_list [1; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_rev q (inj_list [0; 0; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_rev q (inj_list [1; 0; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_rev q (inj_list [0; 0; 0; 1]))) qh; ( **)
+
+  (** ) run show_tree 2 q (REPR (fun q -> leaveso_dir q (inj_list [1; 1]))) qh; ( **)
+  (** ) run show_tree 5 q (REPR (fun q -> leaveso_dir q (inj_list [0; 0; 1]))) qh; ( **)
+  (** ) run show_tree 14 q (REPR (fun q -> leaveso_dir q (inj_list [1; 0; 1]))) qh; ( **)
+
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_dir_wrapped q (inj_list [1; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_dir_wrapped q (inj_list [0; 0; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_dir_wrapped q (inj_list [1; 0; 1]))) qh; ( **)
+  (** ) run show_tree (-1) q (REPR (fun q -> leaveso_dir_wrapped q (inj_list [0; 0; 0; 1]))) qh; ( **)

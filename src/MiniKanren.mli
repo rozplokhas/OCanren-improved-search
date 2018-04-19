@@ -67,15 +67,7 @@ module State :
   end
 
 (** Goal converts a state into lazy stream of states *)
-type term
-
-type goal
-
-type definition
-
-type program  
-
- (*| = State.t -> State.t Stream.t |*)
+type goal = State.t -> State.t Stream.t
 
 (** {3 Logics} *)
 
@@ -159,7 +151,7 @@ module Bool :
       GT.t
 
     (** Sheffer stroke *)
-    (*val (|^) : logic -> logic -> logic -> goal
+    val (|^) : logic -> logic -> logic -> goal
 
     (** Negation *)
     val noto' : logic -> logic -> goal
@@ -177,16 +169,8 @@ module Bool :
     val ando : logic -> logic -> logic -> goal
 
     (** Conjunction as a goal *)
-    val (&&) : logic -> logic -> goal*)
+    val (&&) : logic -> logic -> goal
 
-  end
-
-module IdentSet :
-  sig
-    type t
-
-    val empty     : unit -> t
-    val new_ident : t -> int -> 'a logic
   end
 
 module Nat :
@@ -245,7 +229,7 @@ module Nat :
     val prj : logic -> ground
 
     (** Relational addition *)
-    (* val addo : logic -> logic -> logic -> goal 
+    val addo : logic -> logic -> logic -> goal 
 
     (** Infix syninym for [addo] *)
     val (+) : logic -> logic -> logic -> goal
@@ -266,7 +250,7 @@ module Nat :
     val (<=) : logic -> logic -> goal
     val (>=) : logic -> logic -> goal
     val (>)  : logic -> logic -> goal
-    val (<)  : logic -> logic -> goal *)
+    val (<)  : logic -> logic -> goal
 
   end
 
@@ -334,7 +318,7 @@ module List :
     val prj : ('a -> 'b) -> 'a logic -> 'b ground
 
     (** Relational foldr *)
-    (*val foldro : ('a logic' -> 'b logic' -> 'b logic' -> goal) -> 'b logic' -> 'a logic' logic -> 'b logic' ->  goal
+    val foldro : ('a logic' -> 'b logic' -> 'b logic' -> goal) -> 'b logic' -> 'a logic' logic -> 'b logic' ->  goal
 
     (** Relational map *)
     val mapo : ('a logic' -> 'b logic' -> goal) -> 'a logic' logic ->'b logic' logic -> goal
@@ -361,7 +345,7 @@ module List :
     val reverso : 'a logic' logic -> 'a logic' logic -> goal
 
     (** Relational occurrence check (a shortcut) *)
-    val membero : 'a logic' logic -> 'a logic' -> goal *)
+    val membero : 'a logic' logic -> 'a logic' -> goal
 
   end
 
@@ -394,16 +378,6 @@ val nil : 'a List.logic
 (** [call_fresh f] creates a fresh logical variable and passes it to the
     parameter *)
 val call_fresh : ('a logic -> State.t -> 'b) -> State.t -> 'b
-
-(*| val call_fresh : ('a logic -> State.t -> 'b) -> State.t -> 'b |*)
-
-
-val term_of_logic : 'a logic -> term
-val logic_of_term : term -> 'a logic
-
-val (^~) : 'a logic -> term list -> term list
-val (^.) : 'a logic -> 'b logic  -> term list
-val (!^) : 'a logic -> term list
 
 (** [x === y] creates a goal, which performs a unifications of
     [x] and [y] *)
@@ -442,13 +416,7 @@ val conde : goal list -> goal
     non-empty list of goals *)
 val (?&) : goal list -> goal
 
-val fresh : term list -> goal list -> goal
-
-val invoke : string -> term list -> goal
-
-val def : string -> term list -> goal -> definition
-
-val prog : IdentSet.t -> definition list -> goal -> program
+val relation : string -> Obj.t list -> goal -> goal 
 
 (** {2 Some predefined goals} *)
 
@@ -458,7 +426,7 @@ val success : goal
 (** [failure] always fails *)
 val failure : goal
 
-(*|
+(** {2 Combinators to produce fresh variables} *)
 module Fresh :
   sig
 
@@ -486,8 +454,6 @@ module Fresh :
     val pqrst : ('a logic -> 'b logic -> 'c logic -> 'd logic -> 'e logic -> State.t -> 'f) -> State.t -> 'f
  
   end
-|*)
-
 
 (** {2 Top-level running primitives} *)
 
@@ -519,31 +485,31 @@ val succ :
 
 val one :
   unit ->
-  (('a logic -> program) -> State.t -> 'a refiner * State.t Stream.t) *
+  (('a logic -> State.t -> 'b) -> State.t -> 'a refiner * 'b) *
   (('c -> 'd) -> 'c -> 'd) * 
   (('e -> ('e -> 'f) -> 'f) * ('g -> 'g))
 
 val two :
   unit ->
-  (('b logic -> 'c logic -> program) -> State.t -> 'b refiner * ('c refiner * State.t Stream.t)) *
+  (('b logic -> 'c logic -> State.t -> 'd) -> State.t -> 'b refiner * ('c refiner * 'd)) *
   (('e -> 'f -> 'g) -> 'e * 'f -> 'g) * 
   (('h -> ('h -> 'i) * ('h -> 'j) -> 'i * 'j) * ('k * ('l * 'm) -> ('k * 'l) * 'm))
-      
+        
 val three :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * State.t Stream.t))) *
+  (('b logic -> 'c logic -> 'd logic -> State.t -> 'e) -> State.t -> 'b refiner * ('c refiner * ('d refiner * 'e))) *
   (('f -> 'g -> 'h -> 'i) -> 'f * ('g * 'h) -> 'i) *
   (('j -> ('j -> 'k) * (('j -> 'l) * ('j -> 'm)) -> 'k * ('l * 'm)) * ('n * ('o * ('p * 'q)) -> ('n * ('o * 'p)) * 'q))
-      
+        
 val four :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> 'e logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * State.t Stream.t)))) *
+  (('b logic -> 'c logic -> 'd logic -> 'e logic -> State.t -> 'f) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * 'f)))) *
   (('g -> 'h -> 'i -> 'j -> 'k) -> 'g * ('h * ('i * 'j)) -> 'k) *
   (('l -> ('l -> 'm) * (('l -> 'n) * (('l -> 'o) * ('l -> 'p))) -> 'm * ('n * ('o * 'p))) * ('q * ('r * ('s * ('t * 'u))) -> ('q * ('r * ('s * 't))) * 'u))
-      
+        
 val five :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> program) -> State.t ->  'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * State.t Stream.t))))) *
+  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> State.t -> 'g) -> State.t ->    'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * 'g))))) *
   (('h -> 'i -> 'j -> 'k -> 'l -> 'm) -> 'h * ('i * ('j * ('k * 'l))) -> 'm) * 
   (('n -> ('n -> 'o) * (('n -> 'p) * (('n -> 'q) * (('n -> 'r) * ('n -> 's)))) -> 'o * ('p * ('q * ('r * 's)))) * ('t * ('u * ('v * ('w * ('x * 'y)))) -> ('t * ('u * ('v * ('w * 'x)))) * 'y))
 
@@ -551,30 +517,30 @@ val five :
 
 val q :
   unit ->
-  (('a logic -> program) -> State.t -> 'a refiner * State.t Stream.t) *
+  (('a logic -> State.t -> 'b) -> State.t -> 'a refiner * 'b) *
   (('c -> 'd) -> 'c -> 'd) * 
   (('e -> ('e -> 'f) -> 'f) * ('g -> 'g))
 
 val qr :
   unit ->
-  (('b logic -> 'c logic -> program) -> State.t -> 'b refiner * ('c refiner * State.t Stream.t)) *
+  (('b logic -> 'c logic -> State.t -> 'd) -> State.t -> 'b refiner * ('c refiner * 'd)) *
   (('e -> 'f -> 'g) -> 'e * 'f -> 'g) * 
   (('h -> ('h -> 'i) * ('h -> 'j) -> 'i * 'j) * ('k * ('l * 'm) -> ('k * 'l) * 'm))
-      
+        
 val qrs :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * State.t Stream.t))) *
+  (('b logic -> 'c logic -> 'd logic -> State.t -> 'e) -> State.t -> 'b refiner * ('c refiner * ('d refiner * 'e))) *
   (('f -> 'g -> 'h -> 'i) -> 'f * ('g * 'h) -> 'i) *
   (('j -> ('j -> 'k) * (('j -> 'l) * ('j -> 'm)) -> 'k * ('l * 'm)) * ('n * ('o * ('p * 'q)) -> ('n * ('o * 'p)) * 'q))
-      
+        
 val qrst :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> 'e logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * State.t Stream.t)))) *
+  (('b logic -> 'c logic -> 'd logic -> 'e logic -> State.t -> 'f) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * 'f)))) *
   (('g -> 'h -> 'i -> 'j -> 'k) -> 'g * ('h * ('i * 'j)) -> 'k) *
   (('l -> ('l -> 'm) * (('l -> 'n) * (('l -> 'o) * ('l -> 'p))) -> 'm * ('n * ('o * 'p))) * ('q * ('r * ('s * ('t * 'u))) -> ('q * ('r * ('s * 't))) * 'u))
-      
+        
 val pqrst :
   unit ->
-  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> program) -> State.t -> 'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * State.t Stream.t))))) *
+  (('b logic -> 'c logic -> 'd logic -> 'e logic -> 'f logic -> State.t -> 'g) -> State.t ->    'b refiner * ('c refiner * ('d refiner * ('e refiner * ('f refiner * 'g))))) *
   (('h -> 'i -> 'j -> 'k -> 'l -> 'm) -> 'h * ('i * ('j * ('k * 'l))) -> 'm) * 
   (('n -> ('n -> 'o) * (('n -> 'p) * (('n -> 'q) * (('n -> 'r) * ('n -> 's)))) -> 'o * ('p * ('q * ('r * 's)))) * ('t * ('u * ('v * ('w * ('x * 'y)))) -> ('t * ('u * ('v * ('w * 'x)))) * 'y))
