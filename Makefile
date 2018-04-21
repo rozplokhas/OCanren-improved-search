@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 MKDIR ?= mkdir -vp
 CP    ?= cp
 
@@ -18,7 +20,10 @@ JSOO_LIB=jsoo_runner/jsoo_runner.cma
 
 .DEFAULT_GOAL: all
 
-all: minikanren_stuff bundle
+all: minikanren_stuff plugin bundle perf
+
+perf:
+	pushd perf_tests && make && popd
 
 minikanren_stuff:
 	$(OB) -Is src $(BYTE_TARGETS) $(NATIVE_TARGETS)
@@ -30,7 +35,7 @@ celan: clean
 
 clean: clean_tests
 	$(RM) -r _build *.log  *.native *.byte
-	#$(MAKE) -C regression clean
+	$(MAKE) -C perf_tests clean
 
 ######################## Tests related stuff  ##########################
 REGRES_CASES := 016 # 000 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015

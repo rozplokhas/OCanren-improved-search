@@ -5,8 +5,8 @@ open MiniKanren
 
 let show_tree = show(logic) (show tree)
 
-let (!!!) = Obj.repr
-
+let (!)   = inj
+let (!!!) = Obj.magic
 
 (* Relations on lists *)
 

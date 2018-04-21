@@ -1,3 +1,4 @@
+open GT
 open MiniKanren
 
 let empty_reifier _ _ = ""
