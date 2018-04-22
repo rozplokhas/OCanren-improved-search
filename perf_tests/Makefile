@@ -8,10 +8,10 @@ PXFLAGS = $(CAMLP5)
 BFLAGS = -rectypes -I `ocamlfind -query ostap` -I `ocamlfind -query GT` -I $(BUILD)/src -I `ocamlfind -query re` 
 OFLAGS = $(BFLAGS)
 
-all: tester.cmx ExtendedDefinitions.cmx $(SOURCES:.ml=.opt)
+all: tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $(SOURCES:.ml=.opt)
 
 %.opt: %.ml
-	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa re.cmxa emacs/re_emacs.cmxa str/re_str.cmxa ostap.cmx unix.cmxa MiniKanren.cmxa tester.cmx ExtendedDefinitions.cmx $<
+	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa re.cmxa emacs/re_emacs.cmxa str/re_str.cmxa ostap.cmx unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
 
 clean:
 	rm -Rf *.cmi *.cmo *.cmx *.annot *.o
