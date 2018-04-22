@@ -10,11 +10,15 @@ OFLAGS = $(BFLAGS)
 
 all: tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $(SOURCES:.ml=.opt)
 
+evaluate: all
+	@rm -f ../evaluation_defs.tex \\
+	@for F in $(SOURCES:.ml=.opt); do echo "Evaluating $$F..." ; ./$$F > /dev/null 2>>  ../evaluation_defs.tex ; done
+
 %.opt: %.ml
 	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa re.cmxa emacs/re_emacs.cmxa str/re_str.cmxa ostap.cmx unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
 
 clean:
-	rm -Rf *.cmi *.cmo *.cmx *.annot *.o
+	rm -Rf *.cmi *.cmo *.cmx *.annot *.o *.opt
 
 # generic rules
 
