@@ -36,7 +36,7 @@ let run printer n num (repr, goal) handler =
         if i = 1
         then (
           Sys.set_signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise Timeout));
-          ignore (Unix.alarm 100);
+          ignore (Unix.alarm 120);
         );
         let get_time = make_timer () in        
         let table = List.map (fun (name, ans) -> name, Stream.take ~n:n ans) @@ run num goal handler in

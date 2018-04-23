@@ -15,13 +15,10 @@ Installation:
 * `opam install GT`
 * `opam install logger`
 
-Building:
+Building, evaluating, and generating the report:
 
-* `make` (this makes OCanren + performance tests)
-
-Evaluating:
-
-* `make evaluate` (this runs all tests; takes some time)
+* `make` - makes OCanren + performance tests, runs all the tests (takes some time) and generates a .tex file;
+* `pdflatex main` - builds report (some generic TeX installation is required).
 
 
 

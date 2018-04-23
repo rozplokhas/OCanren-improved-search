@@ -20,7 +20,10 @@ JSOO_LIB=jsoo_runner/jsoo_runner.cma
 
 .DEFAULT_GOAL: all
 
-all: minikanren_stuff plugin bundle perf
+all: minikanren_stuff plugin bundle perf eval
+
+eval:
+	pushd perf_tests && make evaluate && popd
 
 perf:
 	pushd perf_tests && make && popd
