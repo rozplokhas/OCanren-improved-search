@@ -3,19 +3,19 @@ OCAMLOPT = ocamlopt
 OCAMLDEP = ocamldep
 SOURCES = $(wildcard *_*_*.ml)
 BUILD = ../_build
-CAMLP5 = -pp "camlp5o pr_o.cmo -I `ocamlfind -query logger.syntax` -I $(BUILD)/camlp5 -I `ocamlfind -query ostap.syntax` -I `ocamlfind -query GT.syntax` pa_log.cmo pa_minikanren.cmo pa_ostap.cmo pa_gt.cmo -L `ocamlfind -query GT.syntax`"
+CAMLP5 = -pp "camlp5o pr_o.cmo -I `ocamlfind -query logger.syntax` -I $(BUILD)/camlp5 -I `ocamlfind -query GT.syntax` pa_log.cmo pa_minikanren.cmo pa_gt.cmo -L `ocamlfind -query GT.syntax`"
 PXFLAGS = $(CAMLP5)
-BFLAGS = -rectypes -I `ocamlfind -query ostap` -I `ocamlfind -query GT` -I $(BUILD)/src -I `ocamlfind -query re` 
+BFLAGS = -rectypes -I `ocamlfind -query GT` -I $(BUILD)/src 
 OFLAGS = $(BFLAGS)
 
 all: tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $(SOURCES:.ml=.opt)
 
 evaluate: all
-	@rm -f ../evaluation_defs.tex \\
-	@for F in $(SOURCES:.ml=.opt); do echo "Evaluating $$F..." ; ./$$F > /dev/null 2>>  ../evaluation_defs.tex ; done
+	@rm -f ../evaluation_defs.tex log \\
+	@for F in $(SOURCES:.ml=.opt); do echo "Evaluating $$F..." ; OCAMLRUNPARAM='s=250M,h=250M' ./$$F >> log 2>>  ../evaluation_defs.tex ; done
 
 %.opt: %.ml
-	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa re.cmxa emacs/re_emacs.cmxa str/re_str.cmxa ostap.cmx unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
+	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
 
 clean:
 	rm -Rf *.cmi *.cmo *.cmx *.annot *.o *.opt
