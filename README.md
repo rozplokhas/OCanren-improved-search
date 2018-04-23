@@ -1,9 +1,9 @@
-This is a supplementary evaluation repository for the paper "Improving Refutational Completeness of Relational Search via Divergence Test"
+#This is a supplementary evaluation repository for the paper "Improving Refutational Completeness of Relational Search via Divergence Test"
 
 Prerequisites:
 
-* ocaml [ocaml.org]
-* opam [opam.ocaml.org]
+* [ocaml](ocaml.org)
+* [opam](opam.ocaml.org)
 
 Installation:
 
