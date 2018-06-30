@@ -8,14 +8,14 @@ PXFLAGS = $(CAMLP5)
 BFLAGS = -rectypes -I `ocamlfind -query GT` -I $(BUILD)/src 
 OFLAGS = $(BFLAGS)
 
-all: tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $(SOURCES:.ml=.opt)
+all: tester.cmx OptimisticDefinitions.cmx PessimisticImprovedDefinitions.cmx OptimisticImprovedDefinitions.cmx PessimisticDefinitions.cmx $(SOURCES:.ml=.opt)
 
 evaluate: all
 	@rm -f ../evaluation_defs.tex log \\
 	@for F in $(SOURCES:.ml=.opt); do echo "Evaluating $$F..." ; OCAMLRUNPARAM='s=250M,h=250M' ./$$F >> log 2>>  ../evaluation_defs.tex ; done
 
 %.opt: %.ml
-	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx ImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
+	$(OCAMLOPT) -o $@ $(CAMLP5) $(OFLAGS) GT.cmxa unix.cmxa MiniKanren.cmxa tester.cmx OptimisticDefinitions.cmx PessimisticImprovedDefinitions.cmx OptimisticImprovedDefinitions.cmx PessimisticDefinitions.cmx $<
 
 clean:
 	rm -Rf *.cmi *.cmo *.cmx *.annot *.o *.opt
